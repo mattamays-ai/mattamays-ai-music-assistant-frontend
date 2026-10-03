@@ -32,14 +32,14 @@
         <div class="grid gap-3 sm:grid-cols-2">
           <label class="text-sm">{{ $t("providers.smart_dj.mode") }}
             <select v-model="mode" class="mt-1 w-full rounded-md border bg-background px-3 py-2">
-              <option value="ai_dj">AI DJ</option><option value="party">Party</option>
-              <option value="chill">Chill</option><option value="workout">Workout</option>
-              <option value="custom">Custom</option>
+              <option value="ai_dj">{{ $t("providers.smart_dj.ai_dj") }}</option><option value="party">{{ $t("providers.smart_dj.party") }}</option>
+              <option value="chill">{{ $t("providers.smart_dj.chill") }}</option><option value="workout">{{ $t("providers.smart_dj.workout") }}</option>
+              <option value="custom">{{ $t("providers.smart_dj.custom") }}</option>
             </select>
           </label>
           <label class="text-sm">{{ $t("providers.smart_dj.analysis_provider") }}
             <select v-model="analysisProvider" class="mt-1 w-full rounded-md border bg-background px-3 py-2">
-              <option value="auto">Automatic fallback</option><option value="music_assistant">Music Assistant</option><option value="musicae">Musicae</option>
+              <option value="auto">{{ $t("providers.smart_dj.automatic_fallback") }}</option><option value="music_assistant">{{ $t("providers.smart_dj.music_assistant") }}</option><option value="musicae">{{ $t("providers.smart_dj.musicae") }}</option>
             </select>
           </label>
           <label class="text-sm">{{ $t("providers.smart_dj.transition_bars") }}
@@ -111,7 +111,7 @@
           <div class="mb-2 flex items-center justify-between">
             <span class="font-medium capitalize">{{ signal.replace("_", " ") }}</span>
             <select v-model="signals[signal].state" class="rounded border bg-background px-2 py-1 text-xs">
-              <option value="hard">Hard</option><option value="soft">Soft</option><option value="disabled">Disabled</option>
+              <option value="hard">{{ $t("providers.smart_dj.hard") }}</option><option value="soft">{{ $t("providers.smart_dj.soft") }}</option><option value="disabled">{{ $t("providers.smart_dj.disabled") }}</option>
             </select>
           </div>
           <input v-model.number="signals[signal].weight" :disabled="signals[signal].state !== 'soft'" type="range" min="0" max="3" step="0.1" class="w-full" />
@@ -153,10 +153,10 @@
     <div v-if="capabilities" class="rounded-xl border bg-card p-5 shadow-sm">
       <h2 class="mb-2 text-lg font-semibold">{{ $t("providers.smart_dj.capabilities") }}</h2>
       <div class="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-        <span>MA analysis: {{ capabilities.analysis.music_assistant ? "available" : "unavailable" }}</span>
-        <span>Musicae: {{ capabilities.analysis.musicae ? "configured" : "not configured" }}</span>
-        <span>Smart Fades: {{ capabilities.mixing.smart_fades ? "available" : "unavailable" }}</span>
-        <span>Vocal protection: {{ capabilities.mixing.vocal_protection ? "available" : "unavailable" }}</span>
+        <span>{{ $t("providers.smart_dj.music_assistant") }}: {{ capabilities.analysis.music_assistant ? $t("providers.smart_dj.available") : $t("providers.smart_dj.unavailable_value") }}</span>
+        <span>{{ $t("providers.smart_dj.musicae") }}: {{ capabilities.analysis.musicae ? $t("providers.smart_dj.configured") : $t("providers.smart_dj.not_configured") }}</span>
+        <span>{{ $t("providers.smart_dj.smart_fades") }}: {{ capabilities.mixing.smart_fades ? $t("providers.smart_dj.available") : $t("providers.smart_dj.unavailable_value") }}</span>
+        <span>{{ $t("providers.smart_dj.vocal_protection") }}: {{ capabilities.mixing.vocal_protection ? $t("providers.smart_dj.available") : $t("providers.smart_dj.unavailable_value") }}</span>
       </div>
     </div>
   </section>
