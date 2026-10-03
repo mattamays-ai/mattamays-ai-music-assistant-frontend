@@ -82,7 +82,7 @@
         <div class="mt-3 grid gap-3 sm:grid-cols-3">
           <label class="text-sm">{{ $t("providers.smart_dj.key_rule") }}
             <select v-model="keyRelation" class="mt-1 w-full rounded-md border bg-background px-3 py-2">
-              <option value="compatible">{{ $t("providers.smart_dj.key_compatible") }}</option><option value="same">{{ $t("providers.smart_dj.key_same") }}</option><option value="any">{{ $t("providers.smart_dj.key_any") }}</option>
+              <option value="compatible">{{ $t("providers.smart_dj.key_rule_compatible") }}</option><option value="same">{{ $t("providers.smart_dj.key_rule_same") }}</option><option value="any">{{ $t("providers.smart_dj.key_rule_any") }}</option>
             </select>
           </label>
           <label class="text-sm">{{ $t("providers.smart_dj.instrumental") }}
@@ -188,11 +188,11 @@ interface SmartTrack {
   required: boolean; fixed: boolean; excluded: boolean;
 }
 interface Signal { state: "hard" | "soft" | "disabled"; weight: number; }
+interface SmartDjCommandResponse { tracks?: unknown[]; }
 interface Capabilities {
   analysis: { music_assistant: boolean; musicae: boolean };
   mixing: { smart_fades: boolean; transition_planner: boolean; vocal_protection: boolean; bass_eq_management: boolean; tempo_planning: boolean };
 }
-interface SmartDJTracksPayload { tracks?: unknown[] }
 
 const loading = ref(false), pendingPlan = ref(false), mode = ref("ai_dj");
 const bpmMin = ref<number | null>(null), bpmMax = ref<number | null>(null), maxBpmJump = ref<number | null>(null);
@@ -263,24 +263,21 @@ function savePreferences() {
 function restorePreferences() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as Record<string, unknown>;
-    if (typeof saved.mode === "string") mode.value = saved.mode;
-    if (typeof saved.bpmMin === "number" || saved.bpmMin === null) bpmMin.value = saved.bpmMin as number | null;
-    if (typeof saved.bpmMax === "number" || saved.bpmMax === null) bpmMax.value = saved.bpmMax as number | null;
-    if (typeof saved.maxBpmJump === "number" || saved.maxBpmJump === null) maxBpmJump.value = saved.maxBpmJump as number | null;
-    if (typeof saved.bpmTolerance === "number") bpmTolerance.value = saved.bpmTolerance;
-    if (typeof saved.keyRelation === "string") keyRelation.value = saved.keyRelation;
-    if (typeof saved.instrumental === "string") instrumental.value = saved.instrumental;
-    if (typeof saved.explicit === "string") explicit.value = saved.explicit;
-    if (typeof saved.transitionBars === "number") transitionBars.value = saved.transitionBars;
-    if (typeof saved.lookahead === "number") lookahead.value = saved.lookahead;
-    if (typeof saved.maxArtistRepeat === "number") maxArtistRepeat.value = saved.maxArtistRepeat;
-    if (typeof saved.transitionAggressiveness === "number") transitionAggressiveness.value = saved.transitionAggressiveness;
-    if (typeof saved.automix === "boolean") automix.value = saved.automix;
-    if (typeof saved.smartReorder === "boolean") smartReorder.value = saved.smartReorder;
-    if (typeof saved.preserveVariety === "boolean") preserveVariety.value = saved.preserveVariety;
-    if (typeof saved.endTrackId === "string") endTrackId.value = saved.endTrackId;
+    for (const [key, setter] of Object.entries({
+      mode: (v: unknown) => mode.value = String(v), analysisProvider: (v: unknown) => analysisProvider.value = ["auto","music_assistant","musicae"].includes(String(v)) ? String(v) : "auto", bpmMin: (v: unknown) => bpmMin.value = typeof v === "number" ? v : null,
+      bpmMax: (v: unknown) => bpmMax.value = typeof v === "number" ? v : null, maxBpmJump: (v: unknown) => maxBpmJump.value = typeof v === "number" ? v : null,
+      bpmTolerance: (v: unknown) => bpmTolerance.value = typeof v === "number" ? v : 0.08, keyRelation: (v: unknown) => keyRelation.value = String(v),
+      instrumental: (v: unknown) => instrumental.value = String(v), explicit: (v: unknown) => explicit.value = String(v),
+      transitionBars: (v: unknown) => transitionBars.value = Number(v) || 8, lookahead: (v: unknown) => lookahead.value = Number(v) || 4,
+      maxArtistRepeat: (v: unknown) => maxArtistRepeat.value = Math.max(1, Number(v) || 1),
+      transitionAggressiveness: (v: unknown) => transitionAggressiveness.value = Number(v) || 0.5,
+      automix: (v: unknown) => automix.value = Boolean(v), smartReorder: (v: unknown) => smartReorder.value = v !== false,
+      preserveVariety: (v: unknown) => preserveVariety.value = v !== false, endTrackId: (v: unknown) => endTrackId.value = String(v || ""),
+    })) {
+      if (key in saved) setter(saved[key]);
+    }
     const savedSignals = saved.signals as Record<string, Signal> | undefined;
-    if (savedSignals) for (const name of signalNames) if (savedSignals[name]) Object.assign(signals[name], savedSignals[name]);
+    if (savedSignals) for (const name of signalNames) if (savedSignals[name]) signals[name] = savedSignals[name];
   } catch { /* ignore malformed local preferences */ }
 }
 async function refresh() {
@@ -289,9 +286,9 @@ async function refresh() {
   loading.value = true;
   try {
     const previous = new Map(tracks.value.map((t) => [t.queue_item_id, t]));
-    const result = await api.sendCommand("smart_dj/analyze", { queue_id: queueId, limit: 40 }) as SmartDJTracksPayload;
-    tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).slice(1).map((x: unknown) => decorate(x, previous));
-    const status = await api.sendCommand("smart_dj/capabilities", {}) as Capabilities;
+    const result = await api.sendCommand<SmartDjCommandResponse>("smart_dj/analyze", { queue_id: queueId, limit: 40 });
+    tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).slice(1).map((x) => decorate(x, previous));
+    const status = await api.sendCommand<Capabilities>("smart_dj/capabilities", {});
     capabilities.value = status;
     pendingPlan.value = false;
   } catch (error) { toast.error(error instanceof Error ? error.message : String(error)); }
@@ -302,12 +299,12 @@ async function plan() {
   if (!queueId || !tracks.value.length) return;
   loading.value = true;
   try {
-    const result = await api.sendCommand("smart_dj/rank_queue", {
+    const result = await api.sendCommand<SmartDjCommandResponse>("smart_dj/rank_queue", {
       queue_id: queueId, bpm_tolerance: bpmTolerance.value, mode: mode.value,
       prefer_keys: keyRelation.value !== "any", preserve_variety: preserveVariety.value, controls: buildControls(false),
-    }) as SmartDJTracksPayload;
+    });
     const previous = new Map(tracks.value.map((t) => [t.queue_item_id, t]));
-    tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).map((x: unknown) => decorate(x, previous));
+    tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).map((x) => decorate(x, previous));
     pendingPlan.value = true;
   } catch (error) { toast.error(error instanceof Error ? error.message : String(error)); }
   finally { loading.value = false; }
@@ -317,12 +314,12 @@ async function applyPlan() {
   if (!queueId || !pendingPlan.value) return;
   loading.value = true;
   try {
-    const result = await api.sendCommand("smart_dj/rank_queue", {
+    const result = await api.sendCommand<SmartDjCommandResponse>("smart_dj/rank_queue", {
       queue_id: queueId, bpm_tolerance: bpmTolerance.value, mode: mode.value,
       prefer_keys: keyRelation.value !== "any", preserve_variety: preserveVariety.value, controls: buildControls(true),
-    }) as SmartDJTracksPayload;
+    });
     const previous = new Map(tracks.value.map((t) => [t.queue_item_id, t]));
-    tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).map((x: unknown) => decorate(x, previous));
+    tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).map((x) => decorate(x, previous));
     pendingPlan.value = false;
     toast.success($t("providers.smart_dj.applied"));
   } catch (error) { toast.error(error instanceof Error ? error.message : String(error)); }
@@ -332,9 +329,11 @@ watch(() => [store.activePlayerId, activeQueue.value?.queue_id, activeQueue.valu
 onMounted(() => { restorePreferences(); void refresh(); });
 watch(
   () => [mode.value, analysisProvider.value, bpmMin.value, bpmMax.value, maxBpmJump.value, bpmTolerance.value, keyRelation.value,
-    instrumental.value, explicit.value, transitionBars.value, lookahead.value, maxArtistRepeat.value, transitionAggressiveness.value,
-    automix.value, smartReorder.value, preserveVariety.value, endTrackId.value, JSON.stringify(signals)],
-  () => savePreferences(),
+    instrumental.value, explicit.value, transitionBars.value, lookahead.value, maxArtistRepeat.value,
+    transitionAggressiveness.value, automix.value, smartReorder.value, preserveVariety.value, endTrackId.value,
+    ...signalNames.flatMap((name) => [signals[name].state, signals[name].weight])],
+  savePreferences,
   { deep: true },
 );
+onUnmounted(() => { pendingPlan.value = false; });
 </script>
