@@ -204,6 +204,7 @@ const MENU_ITEM_REGISTRY: MenuItemDefinition[] = [
     path: "/smart-dj",
     isLibraryNode: false,
     group: "plugins",
+    available: () => store.enabledPlugins.has("smart_dj"),
   },
   {
     id: "ai_radio",
