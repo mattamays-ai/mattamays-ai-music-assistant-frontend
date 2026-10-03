@@ -41,10 +41,10 @@
             <div class="text-muted-foreground">{{ currentTrack.artist }}</div>
           </div>
           <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Metric label="BPM" :value="formatBpm(currentAnalysis?.bpm)" />
-            <Metric label="Key" :value="currentAnalysis?.key || '—'" />
-            <Metric label="Camelot" :value="currentAnalysis?.camelot || '—'" />
-            <Metric label="Match" :value="currentAnalysis ? 'Analyzed' : 'Pending'" />
+            <div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">BPM</div><div class="mt-1 font-semibold">{{ formatBpm(currentAnalysis?.bpm) }}</div></div>
+            <div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">Key</div><div class="mt-1 font-semibold">{{ currentAnalysis?.key || "—" }}</div></div>
+            <div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">Camelot</div><div class="mt-1 font-semibold">{{ currentAnalysis?.camelot || "—" }}</div></div>
+            <div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">Energy</div><div class="mt-1 font-semibold">{{ percent(currentAnalysis?.energy) }}</div></div>
           </div>
         </div>
         <div v-else class="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
@@ -120,7 +120,6 @@
 <script setup lang="ts">
 import { Button } from "@/components/ui/button";
 import { api } from "@/plugins/api";
-import type { QueueItem, Track } from "@/plugins/api/interfaces";
 import { Sparkles, RefreshCw, WandSparkles } from "@lucide/vue";
 import { computed, onMounted, ref } from "vue";
 import { toast } from "vue-sonner";
@@ -129,24 +128,20 @@ interface Analysis {
   bpm: number | null;
   key: string | null;
   camelot: string | null;
+  energy: number | null;
+  danceability: number | null;
+  loudness: number | null;
+  beats_per_bar: number | null;
 }
-
 interface SmartTrack {
   queue_item_id: string;
   name: string;
   artist: string;
   provider: string;
   item_id: string;
-  album_uri?: string | null;
   analysis: Analysis | null;
   score: number | null;
 }
-
-const Metric = (props: { label: string; value: string }) => ({
-  props,
-  template:
-    '<div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">{{ label }}</div><div class="mt-1 font-semibold">{{ value }}</div></div>',
-});
 
 const loading = ref(false);
 const tracks = ref<SmartTrack[]>([]);
@@ -161,87 +156,32 @@ const activePlayer = computed(() =>
     (player) => player.playback_state === "playing" && player.active_source,
   ),
 );
-
 const playerName = computed(() => activePlayer.value?.name || "No active player");
-
 const currentTrack = computed(() => {
   const media = activePlayer.value?.current_media;
-  if (!media) return null;
-  return {
-    name: media.title || "Unknown track",
-    artist: media.artist || media.album_artist || "Unknown artist",
-  };
+  return media
+    ? { name: media.title || "Unknown track", artist: media.artist || media.album_artist || "Unknown artist" }
+    : null;
 });
-
-const analyzedCount = computed(
-  () => tracks.value.filter((track) => track.analysis !== null).length,
-);
+const analyzedCount = computed(() => tracks.value.filter((track) => track.analysis !== null).length);
 
 function formatBpm(bpm: number | null | undefined) {
   return bpm == null ? "—" : Math.round(bpm).toString();
 }
-
-function camelotForKey(key: string | null, mode: string | null = null): string | null {
-  if (!key) return null;
-  const normalized = key.replace("♯", "#").replace("♭", "b").trim();
-  const minor =
-    mode === "minor" ||
-    normalized.toLowerCase().endsWith("m") ||
-    normalized.toLowerCase().includes("minor");
-  const clean = normalized.replace(/m$/i, "").replace(/\s*(major|minor)$/i, "");
-  const major: Record<string, number> = {
-    B: 1, "F#": 2, "Gb": 2, "C#": 3, Db: 3, "G#": 4, Ab: 4,
-    "D#": 5, Eb: 5, A: 6, E: 7, B: 8, "F#": 9, Gb: 9, C: 12, F: 11,
-    G: 9, D: 10, "A#": 6, Bb: 6,
+function percent(value: number | null | undefined) {
+  return value == null ? "—" : `${Math.round(value * 100)}%`;
+}
+function normalizeAnalysis(value: any): Analysis | null {
+  if (!value) return null;
+  return {
+    bpm: value.bpm ?? null,
+    key: value.key ? (value.mode ? `${value.key} ${value.mode}` : value.key) : null,
+    camelot: value.camelot ?? null,
+    energy: value.energy ?? null,
+    danceability: value.danceability ?? null,
+    loudness: value.loudness ?? value.loudness_integrated ?? null,
+    beats_per_bar: value.beats_per_bar ?? value.time_signature ?? null,
   };
-  const minorMap: Record<string, number> = {
-    "G#": 1, Ab: 1, "D#": 2, Eb: 2, A: 3, E: 4, B: 5, "F#": 6, Gb: 6,
-    "C#": 7, Db: 7, "G#": 8, Ab: 8, "D#": 9, Eb: 9, Bb: 10, F: 11, C: 12,
-    G: 1, D: 2,
-  };
-  const number = (minor ? minorMap : major)[clean];
-  return number ? `${number}${minor ? "A" : "B"}` : null;
-}
-
-function keyCompatible(a: string | null, b: string | null) {
-  if (!a || !b) return false;
-  if (a === b) return true;
-  const an = Number(a.slice(0, -1));
-  const bn = Number(b.slice(0, -1));
-  const am = a.endsWith("A");
-  const bm = b.endsWith("A");
-  return an === bn || (an === bn && am !== bm) || ((an - bn + 12) % 12 === 1 && am === bm) || ((bn - an + 12) % 12 === 1 && am === bm);
-}
-
-function scoreTrack(analysis: Analysis | null) {
-  if (!analysis || !currentAnalysis.value) return null;
-  const current = currentAnalysis.value;
-  let score = 0.5;
-  if (analysis.bpm != null && current.bpm != null) {
-    const delta = Math.abs(analysis.bpm - current.bpm) / Math.max(current.bpm, 1);
-    score += Math.max(0, 0.35 * (1 - delta / (bpmTolerance.value / 100)));
-  }
-  if (preferKeys.value && keyCompatible(analysis.camelot, current.camelot)) score += 0.15;
-  return Math.min(1, score);
-}
-
-async function loadAnalysis(item: QueueItem): Promise<Analysis | null> {
-  const media = item.media_item as Record<string, unknown> | null;
-  const itemId = String(media?.item_id || "");
-  const provider = String(media?.provider || "");
-  if (!itemId || !provider) return null;
-  try {
-    const track = (await api.getTrack(itemId, provider)) as Track;
-    const metadata = track.audio_metadata;
-    if (!metadata) return null;
-    return {
-      bpm: metadata.bpm ?? null,
-      key: metadata.musical_key ?? null,
-      camelot: camelotForKey(metadata.musical_key),
-    };
-  } catch {
-    return null;
-  }
 }
 
 async function refresh() {
@@ -254,28 +194,21 @@ async function refresh() {
   loading.value = true;
   optimized.value = false;
   try {
-    const queueItems = await api.getPlayerQueueItems(player.active_source, 40, 0);
-    const currentItemId = api.queues[player.active_source]?.current_item;
-    const upcoming = queueItems.filter((item) => item.queue_item_id !== currentItemId).slice(0, 20);
-    const loaded = await Promise.all(
-      upcoming.map(async (item) => {
-        const analysis = await loadAnalysis(item);
-        return {
-          queue_item_id: item.queue_item_id,
-          name: item.name,
-          artist: item.media_item?.artists?.[0]?.name || "",
-          provider: String((item.media_item as Record<string, unknown> | null)?.provider || ""),
-          item_id: String((item.media_item as Record<string, unknown> | null)?.item_id || ""),
-          album_uri: null,
-          analysis,
-          score: scoreTrack(analysis),
-        };
-      }),
-    );
-    tracks.value = loaded;
-    const current = queueItems.find((item) => item.queue_item_id === currentItemId);
-    currentAnalysis.value = current ? await loadAnalysis(current) : null;
-    tracks.value = tracks.value.map((track) => ({ ...track, score: scoreTrack(track.analysis) }));
+    const result = await api.sendCommand("smart_dj/analyze", {
+      queue_id: player.active_source,
+      limit: 40,
+    });
+    const analyzed = Array.isArray(result?.tracks) ? result.tracks : [];
+    tracks.value = analyzed.slice(1).map((track: any) => ({
+      queue_item_id: track.queue_item_id,
+      name: track.name,
+      artist: track.artist || "",
+      provider: track.provider,
+      item_id: track.item_id,
+      analysis: normalizeAnalysis(track.analysis),
+      score: null,
+    }));
+    currentAnalysis.value = normalizeAnalysis(result?.current);
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error));
   } finally {
@@ -285,20 +218,26 @@ async function refresh() {
 
 async function optimize() {
   const player = activePlayer.value;
-  if (!player?.active_source || tracks.value.length < 2) return;
+  if (!player?.active_source || tracks.value.length < 1) return;
   loading.value = true;
   try {
-    const ordered = [...tracks.value].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-    // Move in ranked order so each selected item is placed after the remaining
-    // unprocessed items, preserving the player-owned head of the queue.
-    for (const track of ordered) {
-      await api.sendCommand("player_queues/move_item_end", {
-        queue_id: player.active_source,
-        queue_item_id: track.queue_item_id,
-      });
-    }
+    const result = await api.sendCommand("smart_dj/rank_queue", {
+      queue_id: player.active_source,
+      bpm_tolerance: bpmTolerance.value / 100,
+      prefer_keys: preferKeys.value,
+      preserve_variety: preserveVariety.value,
+    });
+    const ranked = Array.isArray(result?.tracks) ? result.tracks : [];
+    tracks.value = ranked.map((track: any) => ({
+      queue_item_id: track.queue_item_id,
+      name: track.name,
+      artist: track.artist || "",
+      provider: track.provider,
+      item_id: track.item_id,
+      analysis: normalizeAnalysis(track.analysis),
+      score: typeof track.score === "number" ? track.score : null,
+    }));
     optimized.value = true;
-    await refresh();
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error));
   } finally {
