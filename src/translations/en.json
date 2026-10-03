@@ -2133,7 +2133,8 @@
       "no_queue": "No upcoming queue items found.",
       "capabilities": "Installed plugin capabilities",
       "external_source": "The selected player is using an external source that has no Music Assistant queue.",
-      "applied": "Queue applied."
+      "applied": "Queue applied.",
+      "unavailable": "Smart DJ is not enabled on this Music Assistant server."
     }
   },
   "no_lyrics_available": "No lyrics available",
