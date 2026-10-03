@@ -3,87 +3,104 @@
     <header class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div>
         <h1 class="inline-flex items-center text-2xl font-semibold tracking-tight">
-          <Sparkles class="mr-2 h-5 w-5" /> Smart DJ
+          <Sparkles class="mr-2 h-5 w-5" /> {{ $t("providers.smart_dj.title") }}
         </h1>
-        <p class="text-sm text-muted-foreground">
-          Fully user-controlled queue intelligence and transition planning.
-        </p>
+        <p class="text-sm text-muted-foreground">{{ $t("providers.smart_dj.subtitle") }}</p>
       </div>
       <div class="flex gap-2">
         <Button variant="outline" :disabled="loading" @click="refresh">
-          <RefreshCw class="mr-1 h-4 w-4" :class="{ 'animate-spin': loading }" /> Analyze
+          <RefreshCw class="mr-1 h-4 w-4" :class="{ 'animate-spin': loading }" />
+          {{ $t("providers.smart_dj.analyze") }}
         </Button>
-        <Button :disabled="loading || !tracks.length || !smartReorder" @click="optimize">
-          <WandSparkles class="mr-1 h-4 w-4" /> Smart Queue
+        <Button v-if="pendingPlan" :disabled="loading" @click="applyPlan">
+          <Check class="mr-1 h-4 w-4" /> {{ $t("providers.smart_dj.apply") }}
+        </Button>
+        <Button :disabled="loading || !tracks.length || !smartReorder" @click="plan">
+          <WandSparkles class="mr-1 h-4 w-4" /> {{ $t("providers.smart_dj.plan") }}
         </Button>
       </div>
     </header>
 
+    <div v-if="unsupportedSource" class="rounded-xl border border-dashed p-5 text-sm">
+      {{ $t("providers.smart_dj.external_source") }}
+    </div>
+
     <div class="grid gap-4 lg:grid-cols-2">
       <div class="rounded-xl border bg-card p-5 shadow-sm">
-        <h2 class="mb-1 text-lg font-semibold">Operating mode</h2>
-        <p class="mb-4 text-sm text-muted-foreground">Modes are presets; your explicit controls remain authoritative.</p>
+        <h2 class="mb-1 text-lg font-semibold">{{ $t("providers.smart_dj.mode_title") }}</h2>
+        <p class="mb-4 text-sm text-muted-foreground">{{ $t("providers.smart_dj.mode_subtitle") }}</p>
         <div class="grid gap-3 sm:grid-cols-2">
-          <label class="text-sm">DJ mode
+          <label class="text-sm">{{ $t("providers.smart_dj.mode") }}
             <select v-model="mode" class="mt-1 w-full rounded-md border bg-background px-3 py-2">
               <option value="ai_dj">AI DJ</option><option value="party">Party</option>
               <option value="chill">Chill</option><option value="workout">Workout</option>
               <option value="custom">Custom</option>
             </select>
           </label>
-          <label class="text-sm">Transition bars
+          <label class="text-sm">{{ $t("providers.smart_dj.transition_bars") }}
             <select v-model.number="transitionBars" class="mt-1 w-full rounded-md border bg-background px-3 py-2">
-              <option :value="4">4</option><option :value="8">8</option><option :value="16">16</option><option :value="32">32</option>
+              <option v-for="n in [4,8,16,32]" :key="n" :value="n">{{ n }}</option>
             </select>
           </label>
-          <label class="text-sm">Look-ahead
+          <label class="text-sm">{{ $t("providers.smart_dj.lookahead") }}
             <select v-model.number="lookahead" class="mt-1 w-full rounded-md border bg-background px-3 py-2">
-              <option v-for="n in [1,2,4,8,16,32]" :key="n" :value="n">{{ n }} tracks</option>
+              <option v-for="n in [1,2,4,8,16,32]" :key="n" :value="n">{{ n }}</option>
             </select>
           </label>
-          <label class="text-sm">Max artist repeat
-            <input v-model.number="maxArtistRepeat" type="number" min="0" max="20" class="mt-1 w-full rounded-md border bg-background px-3 py-2" />
+          <label class="text-sm">{{ $t("providers.smart_dj.max_artist_repeat") }}
+            <input v-model.number="maxArtistRepeat" type="number" min="1" max="20" class="mt-1 w-full rounded-md border bg-background px-3 py-2" />
           </label>
-        </div>
-        <div class="mt-4 grid gap-3 sm:grid-cols-2">
-          <label class="flex items-center justify-between text-sm"><span>Smart Reorder</span><input v-model="smartReorder" type="checkbox" class="h-4 w-4" /></label>
-          <label class="flex items-center justify-between text-sm"><span>AutoMix independently</span><input v-model="automix" type="checkbox" class="h-4 w-4" /></label>
+          <label class="text-sm">{{ $t("providers.smart_dj.transition_aggressiveness") }}
+            <input v-model.number="transitionAggressiveness" type="range" min="0" max="1" step="0.05" class="mt-2 w-full" />
+            <span class="text-xs text-muted-foreground">{{ Math.round(transitionAggressiveness * 100) }}%</span>
+          </label>
+          <label class="flex items-center justify-between text-sm"><span>{{ $t("providers.smart_dj.smart_reorder") }}</span><input v-model="smartReorder" type="checkbox" class="h-4 w-4" /></label>
+          <label class="flex items-center justify-between text-sm"><span>{{ $t("providers.smart_dj.automix") }}</span><input v-model="automix" type="checkbox" class="h-4 w-4" /></label>
+          <label class="flex items-center justify-between text-sm"><span>{{ $t("providers.smart_dj.preserve_variety") }}</span><input v-model="preserveVariety" type="checkbox" class="h-4 w-4" /></label>
+          <label class="text-sm">{{ $t("providers.smart_dj.end_track") }}
+            <select v-model="endTrackId" class="mt-1 w-full rounded-md border bg-background px-3 py-2">
+              <option value="">{{ $t("providers.smart_dj.none") }}</option>
+              <option v-for="track in tracks" :key="track.queue_item_id" :value="track.queue_item_id">{{ track.name }}</option>
+            </select>
+          </label>
         </div>
       </div>
 
       <div class="rounded-xl border bg-card p-5 shadow-sm">
-        <h2 class="mb-1 text-lg font-semibold">Hard constraints</h2>
-        <p class="mb-4 text-sm text-muted-foreground">Hard rules are never violated. Impossible requirements are reported.</p>
+        <h2 class="mb-1 text-lg font-semibold">{{ $t("providers.smart_dj.hard_constraints") }}</h2>
+        <p class="mb-4 text-sm text-muted-foreground">{{ $t("providers.smart_dj.hard_subtitle") }}</p>
         <div class="grid gap-3 sm:grid-cols-3">
-          <label class="text-sm">BPM minimum<input v-model.number="bpmMin" type="number" min="1" max="300" class="mt-1 w-full rounded-md border bg-background px-3 py-2" /></label>
-          <label class="text-sm">BPM maximum<input v-model.number="bpmMax" type="number" min="1" max="300" class="mt-1 w-full rounded-md border bg-background px-3 py-2" /></label>
-          <label class="text-sm">Max BPM jump<input v-model.number="maxBpmJump" type="number" min="0" max="100" class="mt-1 w-full rounded-md border bg-background px-3 py-2" /></label>
+          <label class="text-sm">{{ $t("providers.smart_dj.bpm_min") }}<input v-model.number="bpmMin" type="number" min="1" max="300" class="mt-1 w-full rounded-md border bg-background px-3 py-2" /></label>
+          <label class="text-sm">{{ $t("providers.smart_dj.bpm_max") }}<input v-model.number="bpmMax" type="number" min="1" max="300" class="mt-1 w-full rounded-md border bg-background px-3 py-2" /></label>
+          <label class="text-sm">{{ $t("providers.smart_dj.max_bpm_jump") }}<input v-model.number="maxBpmJump" type="number" min="0" max="100" class="mt-1 w-full rounded-md border bg-background px-3 py-2" /></label>
         </div>
         <div class="mt-3 grid gap-3 sm:grid-cols-3">
-          <label class="text-sm">Key rule
+          <label class="text-sm">{{ $t("providers.smart_dj.key_rule") }}
             <select v-model="keyRelation" class="mt-1 w-full rounded-md border bg-background px-3 py-2">
               <option value="compatible">Compatible</option><option value="same">Same key</option><option value="any">Any key</option>
             </select>
           </label>
-          <label class="text-sm">Instrumental
+          <label class="text-sm">{{ $t("providers.smart_dj.instrumental") }}
             <select v-model="instrumental" class="mt-1 w-full rounded-md border bg-background px-3 py-2">
               <option value="any">Any</option><option value="prefer">Prefer</option><option value="required">Required</option>
             </select>
           </label>
-          <label class="text-sm">Explicit content
+          <label class="text-sm">{{ $t("providers.smart_dj.explicit") }}
             <select v-model="explicit" class="mt-1 w-full rounded-md border bg-background px-3 py-2">
               <option value="allow">Allow</option><option value="exclude">Exclude</option>
             </select>
+          </label>
+        </div>
+        <div class="mt-3">
+          <label class="text-sm">{{ $t("providers.smart_dj.bpm_tolerance") }}
+            <input v-model.number="bpmTolerance" type="number" min="0.01" max="1" step="0.01" class="mt-1 w-full rounded-md border bg-background px-3 py-2" />
           </label>
         </div>
       </div>
     </div>
 
     <div class="rounded-xl border bg-card p-5 shadow-sm">
-      <div class="mb-4">
-        <h2 class="text-lg font-semibold">Signal policy</h2>
-        <p class="text-sm text-muted-foreground">Every signal is explicitly Hard, Soft, or Disabled.</p>
-      </div>
+      <div class="mb-4"><h2 class="text-lg font-semibold">{{ $t("providers.smart_dj.signal_policy") }}</h2><p class="text-sm text-muted-foreground">{{ $t("providers.smart_dj.signal_subtitle") }}</p></div>
       <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <div v-for="signal in signalNames" :key="signal" class="rounded-lg border p-3">
           <div class="mb-2 flex items-center justify-between">
@@ -93,18 +110,15 @@
             </select>
           </div>
           <input v-model.number="signals[signal].weight" :disabled="signals[signal].state !== 'soft'" type="range" min="0" max="3" step="0.1" class="w-full" />
-          <div class="text-xs text-muted-foreground">Soft weight: {{ signals[signal].weight.toFixed(1) }}</div>
+          <div class="text-xs text-muted-foreground">{{ $t("providers.smart_dj.weight") }} {{ signals[signal].weight.toFixed(1) }}</div>
         </div>
       </div>
     </div>
 
     <div class="rounded-xl border bg-card p-5 shadow-sm">
       <div class="mb-4 flex items-center justify-between">
-        <div>
-          <h2 class="text-lg font-semibold">Smart Queue</h2>
-          <p class="text-sm text-muted-foreground">{{ analyzedCount }} of {{ tracks.length }} tracks analyzed</p>
-        </div>
-        <span v-if="optimized" class="text-sm text-muted-foreground">Queue optimized</span>
+        <div><h2 class="text-lg font-semibold">{{ $t("providers.smart_dj.queue_title") }}</h2><p class="text-sm text-muted-foreground">{{ analyzedCount }} / {{ tracks.length }} {{ $t("providers.smart_dj.analyzed") }}</p></div>
+        <span v-if="pendingPlan" class="text-sm text-muted-foreground">{{ $t("providers.smart_dj.preview_ready") }}</span>
       </div>
       <div v-if="tracks.length" class="space-y-2">
         <div v-for="(track, index) in tracks" :key="track.queue_item_id" class="grid gap-3 rounded-lg border p-3 md:grid-cols-[28px_1fr_auto]">
@@ -118,20 +132,21 @@
               <span v-if="track.analysis?.energy != null">{{ percent(track.analysis.energy) }} energy</span>
               <span v-if="track.score !== null">{{ Math.round(track.score * 100) }}%</span>
               <span v-if="track.reasons?.length">{{ track.reasons.join(" · ") }}</span>
+              <span v-if="track.analysis?.source">{{ track.analysis.source }}</span>
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-3 text-xs">
-            <label class="flex items-center gap-1"><input v-model="track.required" type="checkbox" /> Required</label>
-            <label class="flex items-center gap-1"><input v-model="track.fixed" type="checkbox" /> Fixed</label>
-            <label class="flex items-center gap-1"><input v-model="track.excluded" type="checkbox" /> Excluded</label>
+            <label class="flex items-center gap-1"><input v-model="track.required" type="checkbox" /> {{ $t("providers.smart_dj.required") }}</label>
+            <label class="flex items-center gap-1"><input v-model="track.fixed" type="checkbox" /> {{ $t("providers.smart_dj.fixed") }}</label>
+            <label class="flex items-center gap-1"><input v-model="track.excluded" type="checkbox" /> {{ $t("providers.smart_dj.excluded") }}</label>
           </div>
         </div>
       </div>
-      <div v-else class="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No upcoming queue items found.</div>
+      <div v-else class="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">{{ $t("providers.smart_dj.no_queue") }}</div>
     </div>
 
     <div v-if="capabilities" class="rounded-xl border bg-card p-5 shadow-sm">
-      <h2 class="mb-2 text-lg font-semibold">Installed plugin capabilities</h2>
+      <h2 class="mb-2 text-lg font-semibold">{{ $t("providers.smart_dj.capabilities") }}</h2>
       <div class="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <span>MA analysis: {{ capabilities.analysis.music_assistant ? "available" : "unavailable" }}</span>
         <span>Musicae: {{ capabilities.analysis.musicae ? "configured" : "not configured" }}</span>
@@ -144,18 +159,22 @@
 
 <script setup lang="ts">
 import { Button } from "@/components/ui/button";
+import { resolvePlayerQueue } from "@/plugins/api/helpers";
 import { api } from "@/plugins/api";
-import { Sparkles, RefreshCw, WandSparkles } from "@lucide/vue";
-import { computed, onMounted, reactive, ref } from "vue";
+import { $t } from "@/plugins/i18n";
+import { store } from "@/plugins/store";
+import { Check, RefreshCw, Sparkles, WandSparkles } from "@lucide/vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { toast } from "vue-sonner";
 
 interface Analysis {
   bpm: number | null; key: string | null; camelot: string | null; energy: number | null;
   danceability: number | null; loudness: number | null; beats_per_bar: number | null;
+  source?: string; instrumental?: boolean | null; explicit?: boolean | null;
 }
 interface SmartTrack {
   queue_item_id: string; name: string; artist: string; provider: string; item_id: string;
-  analysis: Analysis | null; score: number | null; reasons?: string[];
+  analysis: Analysis | null; score: number | null; reasons: string[];
   required: boolean; fixed: boolean; excluded: boolean;
 }
 interface Signal { state: "hard" | "soft" | "disabled"; weight: number; }
@@ -164,68 +183,107 @@ interface Capabilities {
   mixing: { smart_fades: boolean; transition_planner: boolean; vocal_protection: boolean; bass_eq_management: boolean; tempo_planning: boolean };
 }
 
-const loading = ref(false), optimized = ref(false), mode = ref("ai_dj");
+const loading = ref(false), pendingPlan = ref(false), mode = ref("ai_dj");
 const bpmMin = ref<number | null>(null), bpmMax = ref<number | null>(null), maxBpmJump = ref<number | null>(null);
-const keyRelation = ref("compatible"), instrumental = ref("any"), explicit = ref("allow");
-const transitionBars = ref(8), lookahead = ref(4), maxArtistRepeat = ref(1);
-const automix = ref(false), smartReorder = ref(true), tracks = ref<SmartTrack[]>([]);
-const currentAnalysis = ref<Analysis | null>(null), capabilities = ref<Capabilities | null>(null);
+const bpmTolerance = ref(0.08), keyRelation = ref("compatible"), instrumental = ref("any"), explicit = ref("allow");
+const transitionBars = ref(8), lookahead = ref(4), maxArtistRepeat = ref(1), transitionAggressiveness = ref(0.5);
+const automix = ref(false), smartReorder = ref(true), preserveVariety = ref(true), endTrackId = ref("");
+const tracks = ref<SmartTrack[]>([]), capabilities = ref<Capabilities | null>(null);
 const signalNames = ["bpm","key","energy","danceability","loudness","genre","artist_spacing","momentum"] as const;
 const signals = reactive<Record<string, Signal>>(Object.fromEntries(signalNames.map((name) => [name, { state: "soft", weight: 1 }])));
-const activePlayer = computed(() => Object.values(api.players).find((p) => p.playback_state === "playing" && p.active_source));
+
+const activePlayer = computed(() => store.activePlayer);
+const activeQueue = computed(() => resolvePlayerQueue(activePlayer.value));
+const unsupportedSource = computed(() => !!activePlayer.value?.active_source && !activeQueue.value);
 const analyzedCount = computed(() => tracks.value.filter((t) => t.analysis !== null).length);
 
 function formatBpm(v: number | null | undefined) { return v == null ? "—" : Math.round(v).toString(); }
 function percent(v: number | null | undefined) { return v == null ? "—" : Math.round(v * 100) + "%"; }
-function normalizeAnalysis(v: any): Analysis | null {
-  if (!v) return null;
-  return { bpm: v.bpm ?? null, key: v.key ?? null, camelot: v.camelot ?? null, energy: v.energy ?? null,
-    danceability: v.danceability ?? null, loudness: v.loudness ?? v.loudness_integrated ?? null,
-    beats_per_bar: v.beats_per_bar ?? v.time_signature ?? null };
+function normalizeAnalysis(v: unknown): Analysis | null {
+  if (!v || typeof v !== "object") return null;
+  const a = v as Record<string, unknown>;
+  return {
+    bpm: typeof a.bpm === "number" ? a.bpm : null, key: typeof a.key === "string" ? a.key : null,
+    camelot: typeof a.camelot === "string" ? a.camelot : null, energy: typeof a.energy === "number" ? a.energy : null,
+    danceability: typeof a.danceability === "number" ? a.danceability : null,
+    loudness: typeof a.loudness === "number" ? a.loudness : null,
+    beats_per_bar: typeof a.beats_per_bar === "number" ? a.beats_per_bar : null,
+    source: typeof a.source === "string" ? a.source : undefined,
+    instrumental: typeof a.instrumental === "boolean" ? a.instrumental : null,
+    explicit: typeof a.explicit === "boolean" ? a.explicit : null,
+  };
 }
-function decorate(v: any): SmartTrack {
-  return { queue_item_id: v.queue_item_id, name: v.name, artist: v.artist || "", provider: v.provider,
-    item_id: v.item_id, analysis: normalizeAnalysis(v.analysis), score: typeof v.score === "number" ? v.score : null,
-    reasons: Array.isArray(v.reasons) ? v.reasons : [], required: false, fixed: false, excluded: false };
+function decorate(v: unknown, previous?: Map<string, SmartTrack>): SmartTrack {
+  const a = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  const id = String(a.queue_item_id ?? "");
+  const old = previous?.get(id);
+  return {
+    queue_item_id: id, name: String(a.name ?? ""), artist: String(a.artist ?? ""), provider: String(a.provider ?? ""),
+    item_id: String(a.item_id ?? ""), analysis: normalizeAnalysis(a.analysis), score: typeof a.score === "number" ? a.score : null,
+    reasons: Array.isArray(a.reasons) ? a.reasons.filter((x): x is string => typeof x === "string") : [],
+    required: old?.required ?? false, fixed: old?.fixed ?? false, excluded: old?.excluded ?? false,
+  };
 }
-function controls() {
+function buildControls(apply = false) {
   return {
     ...Object.fromEntries(signalNames.map((n) => [n, signals[n]])),
-    bpm_min: bpmMin.value, bpm_max: bpmMax.value, max_bpm_jump: maxBpmJump.value, key_relation: keyRelation.value,
-    max_artist_repeat: maxArtistRepeat.value, instrumental: instrumental.value, explicit: explicit.value,
+    bpm_min: bpmMin.value, bpm_max: bpmMax.value, max_bpm_jump: maxBpmJump.value, bpm_tolerance: bpmTolerance.value,
+    key_relation: keyRelation.value, max_artist_repeat: maxArtistRepeat.value, instrumental: instrumental.value, explicit: explicit.value,
     transition_bars: transitionBars.value, automix_enabled: automix.value, smart_reorder_enabled: smartReorder.value,
-    lookahead: lookahead.value,
+    lookahead: lookahead.value, transition_aggressiveness: transitionAggressiveness.value,
+    preserve_variety: preserveVariety.value, end_track_id: endTrackId.value || null, apply,
     required_ids: tracks.value.filter((t) => t.required).map((t) => t.queue_item_id),
     fixed_ids: tracks.value.filter((t) => t.fixed).map((t) => t.queue_item_id),
     excluded_ids: tracks.value.filter((t) => t.excluded).map((t) => t.queue_item_id),
   };
 }
+function currentQueueId(): string | null { return activeQueue.value?.queue_id ?? null; }
 async function refresh() {
-  const player = activePlayer.value;
-  if (!player?.active_source) { tracks.value = []; currentAnalysis.value = null; return; }
+  const queueId = currentQueueId();
+  if (!queueId) { tracks.value = []; pendingPlan.value = false; return; }
   loading.value = true;
   try {
-    const result = await api.sendCommand("smart_dj/analyze", { queue_id: player.active_source, limit: 40 });
-    tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).slice(1).map(decorate);
-    currentAnalysis.value = normalizeAnalysis(result?.current);
+    const previous = new Map(tracks.value.map((t) => [t.queue_item_id, t]));
+    const result = await api.sendCommand("smart_dj/analyze", { queue_id: queueId, limit: 40 });
+    tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).slice(1).map((x) => decorate(x, previous));
     const status = await api.sendCommand("smart_dj/capabilities", {});
     capabilities.value = status;
+    pendingPlan.value = false;
   } catch (error) { toast.error(error instanceof Error ? error.message : String(error)); }
   finally { loading.value = false; }
 }
-async function optimize() {
-  const player = activePlayer.value;
-  if (!player?.active_source || !tracks.value.length) return;
+async function plan() {
+  const queueId = currentQueueId();
+  if (!queueId || !tracks.value.length) return;
   loading.value = true;
   try {
     const result = await api.sendCommand("smart_dj/rank_queue", {
-      queue_id: player.active_source, bpm_tolerance: 0.08, mode: mode.value,
-      prefer_keys: keyRelation.value !== "any", preserve_variety: true, controls: controls(),
+      queue_id: queueId, bpm_tolerance: bpmTolerance.value, mode: mode.value,
+      prefer_keys: keyRelation.value !== "any", preserve_variety: preserveVariety.value, controls: buildControls(false),
     });
-    tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).map(decorate);
-    optimized.value = true;
+    const previous = new Map(tracks.value.map((t) => [t.queue_item_id, t]));
+    tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).map((x) => decorate(x, previous));
+    pendingPlan.value = true;
   } catch (error) { toast.error(error instanceof Error ? error.message : String(error)); }
   finally { loading.value = false; }
 }
+async function applyPlan() {
+  const queueId = currentQueueId();
+  if (!queueId || !pendingPlan.value) return;
+  loading.value = true;
+  try {
+    const result = await api.sendCommand("smart_dj/rank_queue", {
+      queue_id: queueId, bpm_tolerance: bpmTolerance.value, mode: mode.value,
+      prefer_keys: keyRelation.value !== "any", preserve_variety: preserveVariety.value, controls: buildControls(true),
+    });
+    const previous = new Map(tracks.value.map((t) => [t.queue_item_id, t]));
+    tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).map((x) => decorate(x, previous));
+    pendingPlan.value = false;
+    toast.success($t("providers.smart_dj.applied"));
+  } catch (error) { toast.error(error instanceof Error ? error.message : String(error)); }
+  finally { loading.value = false; }
+}
+watch(() => [store.activePlayerId, activeQueue.value?.queue_id, activeQueue.value?.current_index], () => { void refresh(); });
 onMounted(refresh);
+onUnmounted(() => { pendingPlan.value = false; });
 </script>
