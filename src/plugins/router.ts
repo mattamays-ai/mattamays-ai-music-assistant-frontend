@@ -173,6 +173,12 @@ export const routes: RouteRecordRaw[] = [
           import(/* webpackChunkName: "discover" */ "@/views/HomeView.vue"),
       },
       {
+        path: "/smart-dj",
+        name: "smart-dj",
+        component: () =>
+          import(/* webpackChunkName: "smart-dj" */ "@/views/SmartDJView.vue"),
+      },
+      {
         path: "/ai-radio",
         name: "ai-radio",
         component: () =>
