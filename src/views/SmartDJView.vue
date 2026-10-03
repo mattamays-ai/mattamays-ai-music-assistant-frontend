@@ -15,7 +15,7 @@
         <Button v-if="pendingPlan" :disabled="loading" @click="applyPlan">
           <Check class="mr-1 h-4 w-4" /> {{ $t("providers.smart_dj.apply") }}
         </Button>
-        <Button :disabled="loading || !tracks.length || !smartReorder" @click="plan">
+        <Button :disabled="loading || !tracks.length" @click="plan">
           <WandSparkles class="mr-1 h-4 w-4" /> {{ $t("providers.smart_dj.plan") }}
         </Button>
       </div>
