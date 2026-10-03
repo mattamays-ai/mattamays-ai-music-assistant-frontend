@@ -198,6 +198,7 @@ export const routes: RouteRecordRaw[] = [
             });
           }
           if (!store.enabledPlugins.has("smart_dj")) {
+            toast.error($t("providers.smart_dj.unavailable"));
             return { name: "discover" };
           }
         },
