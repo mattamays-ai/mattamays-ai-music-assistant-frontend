@@ -199,7 +199,7 @@ const MENU_ITEM_REGISTRY: MenuItemDefinition[] = [
   },
   {
     id: "smart_dj",
-    label: "Smart DJ",
+    label: "providers.smart_dj.title",
     icon: WandSparkles,
     path: "/smart-dj",
     isLibraryNode: false,
