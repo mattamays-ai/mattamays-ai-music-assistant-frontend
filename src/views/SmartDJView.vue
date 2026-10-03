@@ -101,6 +101,8 @@
           <div class="flex items-center gap-3 text-xs text-muted-foreground">
             <span v-if="track.analysis?.bpm">{{ formatBpm(track.analysis.bpm) }} BPM</span>
             <span v-if="track.analysis?.camelot">{{ track.analysis.camelot }}</span>
+            <span v-if="track.analysis?.energy != null">{{ percent(track.analysis.energy) }} energy</span>
+            <span v-if="track.score !== null">{{ track.reasons?.join(" · ") }}</span>
             <span
               v-if="track.score !== null"
               class="rounded-full border px-2 py-1 font-medium text-foreground"
@@ -141,6 +143,7 @@ interface SmartTrack {
   item_id: string;
   analysis: Analysis | null;
   score: number | null;
+  reasons?: string[];
 }
 
 const loading = ref(false);
@@ -207,6 +210,7 @@ async function refresh() {
       item_id: track.item_id,
       analysis: normalizeAnalysis(track.analysis),
       score: null,
+      reasons: [],
     }));
     currentAnalysis.value = normalizeAnalysis(result?.current);
   } catch (error) {
@@ -236,6 +240,7 @@ async function optimize() {
       item_id: track.item_id,
       analysis: normalizeAnalysis(track.analysis),
       score: typeof track.score === "number" ? track.score : null,
+      reasons: Array.isArray(track.reasons) ? track.reasons : [],
     }));
     optimized.value = true;
   } catch (error) {
