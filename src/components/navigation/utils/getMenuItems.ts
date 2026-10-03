@@ -20,6 +20,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  WandSparkles,
 } from "@lucide/vue";
 import { Component } from "vue";
 
@@ -195,6 +196,15 @@ const MENU_ITEM_REGISTRY: MenuItemDefinition[] = [
     available: () =>
       store.enabledPlugins.has("music_quiz") &&
       authManager.hasScope(Scope.USERS_INVITE),
+  },
+  {
+    id: "smart_dj",
+    label: "providers.smart_dj.title",
+    icon: WandSparkles,
+    path: "/smart-dj",
+    isLibraryNode: false,
+    group: "plugins",
+    available: () => store.enabledPlugins.has("smart_dj"),
   },
   {
     id: "ai_radio",

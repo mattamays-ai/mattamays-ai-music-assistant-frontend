@@ -173,6 +173,37 @@ export const routes: RouteRecordRaw[] = [
           import(/* webpackChunkName: "discover" */ "@/views/HomeView.vue"),
       },
       {
+        path: "/smart-dj",
+        name: "smart-dj",
+        component: () =>
+          import(/* webpackChunkName: "smart-dj" */ "@/views/SmartDJView.vue"),
+        beforeEnter: async () => {
+          if (api.state.value !== ConnectionState.INITIALIZED) {
+            await new Promise<void>((resolve) => {
+              const timeout = setTimeout(() => {
+                unwatch();
+                resolve();
+              }, 10000);
+              const unwatch = watch(
+                () => api.state.value,
+                (newState) => {
+                  if (newState === ConnectionState.INITIALIZED) {
+                    clearTimeout(timeout);
+                    unwatch();
+                    resolve();
+                  }
+                },
+                { immediate: true },
+              );
+            });
+          }
+          if (!store.enabledPlugins.has("smart_dj")) {
+            toast.error($t("providers.smart_dj.unavailable"));
+            return { name: "discover" };
+          }
+        },
+      },
+      {
         path: "/ai-radio",
         name: "ai-radio",
         component: () =>
