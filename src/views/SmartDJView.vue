@@ -37,6 +37,11 @@
               <option value="custom">Custom</option>
             </select>
           </label>
+          <label class="text-sm">{{ $t("providers.smart_dj.analysis_provider") }}
+            <select v-model="analysisProvider" class="mt-1 w-full rounded-md border bg-background px-3 py-2">
+              <option value="auto">Automatic fallback</option><option value="music_assistant">Music Assistant</option><option value="musicae">Musicae</option>
+            </select>
+          </label>
           <label class="text-sm">{{ $t("providers.smart_dj.transition_bars") }}
             <select v-model.number="transitionBars" class="mt-1 w-full rounded-md border bg-background px-3 py-2">
               <option v-for="n in [4,8,16,32]" :key="n" :value="n">{{ n }}</option>
@@ -185,7 +190,7 @@ interface Capabilities {
 
 const loading = ref(false), pendingPlan = ref(false), mode = ref("ai_dj");
 const bpmMin = ref<number | null>(null), bpmMax = ref<number | null>(null), maxBpmJump = ref<number | null>(null);
-const bpmTolerance = ref(0.08), keyRelation = ref("compatible"), instrumental = ref("any"), explicit = ref("allow");
+const bpmTolerance = ref(0.08), analysisProvider = ref("auto"), keyRelation = ref("compatible"), instrumental = ref("any"), explicit = ref("allow");
 const transitionBars = ref(8), lookahead = ref(4), maxArtistRepeat = ref(1), transitionAggressiveness = ref(0.5);
 const automix = ref(false), smartReorder = ref(true), preserveVariety = ref(true), endTrackId = ref("");
 const tracks = ref<SmartTrack[]>([]), capabilities = ref<Capabilities | null>(null);
@@ -228,7 +233,7 @@ function decorate(v: unknown, previous?: Map<string, SmartTrack>): SmartTrack {
 function buildControls(apply = false) {
   return {
     ...Object.fromEntries(signalNames.map((n) => [n, signals[n]])),
-    bpm_min: bpmMin.value, bpm_max: bpmMax.value, max_bpm_jump: maxBpmJump.value, bpm_tolerance: bpmTolerance.value,
+    bpm_min: bpmMin.value, bpm_max: bpmMax.value, max_bpm_jump: maxBpmJump.value, bpm_tolerance: bpmTolerance.value, analysis_provider: analysisProvider.value,
     key_relation: keyRelation.value, max_artist_repeat: maxArtistRepeat.value, instrumental: instrumental.value, explicit: explicit.value,
     transition_bars: transitionBars.value, automix_enabled: automix.value, smart_reorder_enabled: smartReorder.value,
     lookahead: lookahead.value, transition_aggressiveness: transitionAggressiveness.value,
@@ -253,7 +258,7 @@ function restorePreferences() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as Record<string, unknown>;
     for (const [key, setter] of Object.entries({
-      mode: (v: unknown) => mode.value = String(v), bpmMin: (v: unknown) => bpmMin.value = typeof v === "number" ? v : null,
+      mode: (v: unknown) => mode.value = String(v), analysisProvider: (v: unknown) => analysisProvider.value = ["auto","music_assistant","musicae"].includes(String(v)) ? String(v) : "auto", bpmMin: (v: unknown) => bpmMin.value = typeof v === "number" ? v : null,
       bpmMax: (v: unknown) => bpmMax.value = typeof v === "number" ? v : null, maxBpmJump: (v: unknown) => maxBpmJump.value = typeof v === "number" ? v : null,
       bpmTolerance: (v: unknown) => bpmTolerance.value = typeof v === "number" ? v : 0.08, keyRelation: (v: unknown) => keyRelation.value = String(v),
       instrumental: (v: unknown) => instrumental.value = String(v), explicit: (v: unknown) => explicit.value = String(v),
@@ -317,7 +322,7 @@ async function applyPlan() {
 watch(() => [store.activePlayerId, activeQueue.value?.queue_id, activeQueue.value?.current_index], () => { void refresh(); });
 onMounted(() => { restorePreferences(); void refresh(); });
 watch(
-  () => [mode.value, bpmMin.value, bpmMax.value, maxBpmJump.value, bpmTolerance.value, keyRelation.value,
+  () => [mode.value, analysisProvider.value, bpmMin.value, bpmMax.value, maxBpmJump.value, bpmTolerance.value, keyRelation.value,
     instrumental.value, explicit.value, transitionBars.value, lookahead.value, maxArtistRepeat.value,
     transitionAggressiveness.value, automix.value, smartReorder.value, preserveVariety.value, endTrackId.value,
     ...signalNames.flatMap((name) => [signals[name].state, signals[name].weight])],
