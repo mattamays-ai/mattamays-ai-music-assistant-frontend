@@ -64,6 +64,7 @@
             </div>
             <input v-model.number="bpmTolerance" type="range" min="2" max="20" step="1" class="w-full" />
           </label>
+          <label class="block text-sm"><div class="mb-2">DJ mode</div><select v-model="mode" class="w-full rounded-md border bg-background px-3 py-2"><option value="ai_dj">AI DJ</option><option value="party">Party</option><option value="chill">Chill</option><option value="workout">Workout</option><option value="custom">Custom</option></select></label>
           <label class="flex items-center justify-between gap-4 text-sm">
             <span>Prefer compatible keys</span>
             <input v-model="preferKeys" type="checkbox" class="h-4 w-4" />
@@ -152,6 +153,7 @@ const currentAnalysis = ref<Analysis | null>(null);
 const bpmTolerance = ref(8);
 const preferKeys = ref(true);
 const preserveVariety = ref(true);
+const mode = ref("ai_dj");
 const optimized = ref(false);
 
 const activePlayer = computed(() =>
@@ -228,6 +230,7 @@ async function optimize() {
     const result = await api.sendCommand("smart_dj/rank_queue", {
       queue_id: player.active_source,
       bpm_tolerance: bpmTolerance.value / 100,
+      mode: mode.value,
       prefer_keys: preferKeys.value,
       preserve_variety: preserveVariety.value,
     });
