@@ -2134,7 +2134,8 @@
       "capabilities": "Installed plugin capabilities",
       "external_source": "The selected player is using an external source that has no Music Assistant queue.",
       "applied": "Queue applied.",
-      "unavailable": "Smart DJ is not enabled on this Music Assistant server."
+      "unavailable": "Smart DJ is not enabled on this Music Assistant server.",
+      "analysis_provider": "Analysis provider"
     }
   },
   "no_lyrics_available": "No lyrics available",
