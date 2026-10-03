@@ -136,6 +136,10 @@
               <span v-if="track.analysis?.camelot">{{ track.analysis.camelot }}</span>
               <span v-if="track.analysis?.energy != null">{{ percent(track.analysis.energy) }} energy</span>
               <span v-if="track.score !== null">{{ Math.round(track.score * 100) }}%</span>
+              <span v-if="track.bpm_change != null">Δ {{ track.bpm_change > 0 ? "+" : "" }}{{ Math.round(track.bpm_change) }} BPM</span>
+              <span v-if="track.key_affinity != null">Key {{ Math.round(track.key_affinity * 100) }}%</span>
+              <span v-if="track.energy_delta != null">Energy {{ track.energy_delta > 0 ? "+" : "" }}{{ Math.round(track.energy_delta * 100) }}%</span>
+              <span v-if="track.transition_bars">Blend {{ track.transition_bars }} bars</span>
               <span v-if="track.reasons?.length">{{ track.reasons.join(" · ") }}</span>
               <span v-if="track.analysis?.source">{{ track.analysis.source }}</span>
             </div>
@@ -180,6 +184,7 @@ interface Analysis {
 interface SmartTrack {
   queue_item_id: string; name: string; artist: string; provider: string; item_id: string;
   analysis: Analysis | null; score: number | null; reasons: string[];
+  bpm_change?: number | null; energy_delta?: number | null; key_affinity?: number | null; transition_bars?: number;
   required: boolean; fixed: boolean; excluded: boolean;
 }
 interface Signal { state: "hard" | "soft" | "disabled"; weight: number; }
