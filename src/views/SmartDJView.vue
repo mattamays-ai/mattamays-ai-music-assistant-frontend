@@ -189,6 +189,7 @@ const bpmTolerance = ref(0.08), keyRelation = ref("compatible"), instrumental = 
 const transitionBars = ref(8), lookahead = ref(4), maxArtistRepeat = ref(1), transitionAggressiveness = ref(0.5);
 const automix = ref(false), smartReorder = ref(true), preserveVariety = ref(true), endTrackId = ref("");
 const tracks = ref<SmartTrack[]>([]), capabilities = ref<Capabilities | null>(null);
+const STORAGE_KEY = "smart-dj.controls.v1";
 const signalNames = ["bpm","key","energy","danceability","loudness","genre","artist_spacing","momentum"] as const;
 const signals = reactive<Record<string, Signal>>(Object.fromEntries(signalNames.map((name) => [name, { state: "soft", weight: 1 }])));
 
@@ -238,6 +239,36 @@ function buildControls(apply = false) {
   };
 }
 function currentQueueId(): string | null { return activeQueue.value?.queue_id ?? null; }
+function savePreferences() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    mode: mode.value, bpmMin: bpmMin.value, bpmMax: bpmMax.value, maxBpmJump: maxBpmJump.value,
+    bpmTolerance: bpmTolerance.value, keyRelation: keyRelation.value, instrumental: instrumental.value,
+    explicit: explicit.value, transitionBars: transitionBars.value, lookahead: lookahead.value,
+    maxArtistRepeat: maxArtistRepeat.value, transitionAggressiveness: transitionAggressiveness.value,
+    automix: automix.value, smartReorder: smartReorder.value, preserveVariety: preserveVariety.value,
+    endTrackId: endTrackId.value, signals: JSON.parse(JSON.stringify(signals)),
+  }));
+}
+function restorePreferences() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as Record<string, unknown>;
+    for (const [key, setter] of Object.entries({
+      mode: (v: unknown) => mode.value = String(v), bpmMin: (v: unknown) => bpmMin.value = typeof v === "number" ? v : null,
+      bpmMax: (v: unknown) => bpmMax.value = typeof v === "number" ? v : null, maxBpmJump: (v: unknown) => maxBpmJump.value = typeof v === "number" ? v : null,
+      bpmTolerance: (v: unknown) => bpmTolerance.value = typeof v === "number" ? v : 0.08, keyRelation: (v: unknown) => keyRelation.value = String(v),
+      instrumental: (v: unknown) => instrumental.value = String(v), explicit: (v: unknown) => explicit.value = String(v),
+      transitionBars: (v: unknown) => transitionBars.value = Number(v) || 8, lookahead: (v: unknown) => lookahead.value = Number(v) || 4,
+      maxArtistRepeat: (v: unknown) => maxArtistRepeat.value = Math.max(1, Number(v) || 1),
+      transitionAggressiveness: (v: unknown) => transitionAggressiveness.value = Number(v) || 0.5,
+      automix: (v: unknown) => automix.value = Boolean(v), smartReorder: (v: unknown) => smartReorder.value = v !== false,
+      preserveVariety: (v: unknown) => preserveVariety.value = v !== false, endTrackId: (v: unknown) => endTrackId.value = String(v || ""),
+    })) {
+      if (key in saved) setter(saved[key]);
+    }
+    const savedSignals = saved.signals as Record<string, Signal> | undefined;
+    if (savedSignals) for (const name of signalNames) if (savedSignals[name]) signals[name] = savedSignals[name];
+  } catch { /* ignore malformed local preferences */ }
+}
 async function refresh() {
   const queueId = currentQueueId();
   if (!queueId) { tracks.value = []; pendingPlan.value = false; return; }
@@ -284,6 +315,14 @@ async function applyPlan() {
   finally { loading.value = false; }
 }
 watch(() => [store.activePlayerId, activeQueue.value?.queue_id, activeQueue.value?.current_index], () => { void refresh(); });
-onMounted(refresh);
+onMounted(() => { restorePreferences(); void refresh(); });
+watch(
+  () => [mode.value, bpmMin.value, bpmMax.value, maxBpmJump.value, bpmTolerance.value, keyRelation.value,
+    instrumental.value, explicit.value, transitionBars.value, lookahead.value, maxArtistRepeat.value,
+    transitionAggressiveness.value, automix.value, smartReorder.value, preserveVariety.value, endTrackId.value,
+    ...signalNames.flatMap((name) => [signals[name].state, signals[name].weight])],
+  savePreferences,
+  { deep: true },
+);
 onUnmounted(() => { pendingPlan.value = false; });
 </script>
