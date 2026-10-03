@@ -289,10 +289,9 @@ async function optimize() {
   loading.value = true;
   try {
     const ordered = [...tracks.value].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-    // The server exposes move_item_end as a queue-safe primitive. Move in reverse
-    // order so the final queue matches the desired ranking without replacing the
-    // player-owned head of the queue.
-    for (const track of [...ordered].reverse()) {
+    // Move in ranked order so each selected item is placed after the remaining
+    // unprocessed items, preserving the player-owned head of the queue.
+    for (const track of ordered) {
       await api.sendCommand("player_queues/move_item_end", {
         queue_id: player.active_source,
         queue_item_id: track.queue_item_id,
