@@ -95,6 +95,7 @@ describe("getMenuItems (sidebar.menu preference)", () => {
     storeMock.enabledPlugins = new Set([
       "party",
       "music_quiz",
+      "smart_dj",
       "ai_radio",
       "milkdrop_visualizer",
     ]);
