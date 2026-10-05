@@ -479,7 +479,7 @@ interface SmartTrack {
   bpm_change?: number | null;
   energy_delta?: number | null;
   key_affinity?: number | null;
-  transition_bars?: number;
+  transition_bars?: number | null;
   required: boolean;
   fixed: boolean;
   excluded: boolean;
@@ -505,6 +505,8 @@ interface Capabilities {
 const loading = ref(false),
   pendingPlan = ref(false),
   mode = ref("ai_dj");
+let refreshGeneration = 0;
+let plannedControls: ReturnType<typeof buildControls> | null = null;
 const bpmMin = ref<number | null>(null),
   bpmMax = ref<number | null>(null),
   maxBpmJump = ref<number | null>(null);
@@ -586,9 +588,14 @@ function decorate(v: unknown, previous?: Map<string, SmartTrack>): SmartTrack {
     reasons: Array.isArray(a.reasons)
       ? a.reasons.filter((x): x is string => typeof x === "string")
       : [],
-    required: old?.required ?? false,
-    fixed: old?.fixed ?? false,
-    excluded: old?.excluded ?? false,
+    bpm_change: typeof a.bpm_change === "number" ? a.bpm_change : null,
+    energy_delta: typeof a.energy_delta === "number" ? a.energy_delta : null,
+    key_affinity: typeof a.key_affinity === "number" ? a.key_affinity : null,
+    transition_bars:
+      typeof a.transition_bars === "number" ? a.transition_bars : null,
+    required: old?.required ?? Boolean(a.required),
+    fixed: old?.fixed ?? Boolean(a.fixed),
+    excluded: old?.excluded ?? Boolean(a.excluded),
   };
 }
 function buildControls(apply = false) {
@@ -693,10 +700,12 @@ function restorePreferences() {
   }
 }
 async function refresh() {
+  const generation = ++refreshGeneration;
   const queueId = currentQueueId();
   if (!queueId) {
     tracks.value = [];
     pendingPlan.value = false;
+    plannedControls = null;
     return;
   }
   loading.value = true;
@@ -706,6 +715,7 @@ async function refresh() {
       "smart_dj/analyze",
       { queue_id: queueId, limit: 40 },
     );
+    if (generation !== refreshGeneration) return;
     tracks.value = (Array.isArray(result?.tracks) ? result.tracks : [])
       .slice(1)
       .map((x) => decorate(x, previous));
@@ -713,12 +723,15 @@ async function refresh() {
       "smart_dj/capabilities",
       {},
     );
+    if (generation !== refreshGeneration) return;
     capabilities.value = status;
     pendingPlan.value = false;
+    plannedControls = null;
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : String(error));
+    if (generation === refreshGeneration)
+      toast.error(error instanceof Error ? error.message : String(error));
   } finally {
-    loading.value = false;
+    if (generation === refreshGeneration) loading.value = false;
   }
 }
 async function plan() {
@@ -741,6 +754,7 @@ async function plan() {
     tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).map(
       (x) => decorate(x, previous),
     );
+    plannedControls = buildControls(false);
     pendingPlan.value = true;
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error));
@@ -761,7 +775,9 @@ async function applyPlan() {
         mode: mode.value,
         prefer_keys: keyRelation.value !== "any",
         preserve_variety: preserveVariety.value,
-        controls: buildControls(true),
+        controls: plannedControls
+          ? { ...plannedControls, apply: true }
+          : buildControls(true),
       },
     );
     const previous = new Map(tracks.value.map((t) => [t.queue_item_id, t]));
@@ -769,6 +785,7 @@ async function applyPlan() {
       (x) => decorate(x, previous),
     );
     pendingPlan.value = false;
+    plannedControls = null;
     toast.success($t("providers.smart_dj.applied"));
   } catch (error) {
     toast.error(error instanceof Error ? error.message : String(error));
@@ -818,6 +835,8 @@ watch(
   { deep: true },
 );
 onUnmounted(() => {
+  refreshGeneration++;
   pendingPlan.value = false;
+  plannedControls = null;
 });
 </script>
