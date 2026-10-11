@@ -398,6 +398,7 @@
               <select v-model="keyRelation" class="w-full rounded-md border bg-background px-3 py-2">
                 <option value="compatible">Harmonically compatible</option>
                 <option value="same">Same key only</option>
+                <option value="soft">Prefer key (soft)</option>
                 <option value="any">Ignore key</option>
               </select>
             </label>
@@ -652,7 +653,7 @@ const keyRelation = ref("compatible");
 const instrumental = ref("any");
 const explicit = ref("allow");
 const transitionBars = ref(8);
-const lookahead = ref(4);
+const lookahead = ref(8);
 const maxArtistRepeat = ref(1);
 const transitionAggressiveness = ref(0.5);
 const automix = ref(false);
@@ -931,7 +932,7 @@ function resetPreferences(): void {
   instrumental.value = "any";
   explicit.value = "allow";
   transitionBars.value = 8;
-  lookahead.value = 4;
+  lookahead.value = 8;
   maxArtistRepeat.value = 1;
   transitionAggressiveness.value = 0.5;
   automix.value = false;
