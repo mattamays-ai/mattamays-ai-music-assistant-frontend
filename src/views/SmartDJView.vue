@@ -59,6 +59,9 @@
             <h2 class="text-lg font-semibold">Live queue</h2>
             <p class="text-sm text-muted-foreground">
               {{ tracks.length }} upcoming track(s) · {{ analyzedCount }} analyzed
+              <template v-if="optimizedWindow > 0 && queueItemCount > 0 && optimizedWindow < queueItemCount">
+                · window {{ optimizedWindow }} of {{ queueItemCount }}
+              </template>
             </p>
           </div>
           <span v-if="pendingPlan" class="rounded-full border px-2 py-1 text-xs">
@@ -161,6 +164,15 @@
             <p v-if="!autoMixAvailable" class="mt-2 text-xs text-muted-foreground">
               Current server can plan queue order, but does not execute Smart DJ transitions. Native player crossfade is separate.
             </p>
+            <button
+              type="button"
+              class="mt-3 w-full rounded-md border bg-background px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+              :disabled="loading || completingMix"
+              title="Ask Musicae for compatible tracks and append them to complete the mix"
+              @click="completeMix()"
+            >
+              {{ completingMix ? "Completing…" : "Complete mix (add 5 tracks)" }}
+            </button>
           </div>
         </div>
       </section>
@@ -186,11 +198,31 @@
           </label>
 
           <label class="block text-sm">
+            <span class="mb-1 block font-medium">Blend style</span>
+            <select v-model="transitionStyle" class="mt-2 w-full rounded-md border bg-background px-3 py-2">
+              <option value="auto">Auto — engine decides</option>
+              <option value="full_blend">Full blend — long beat-matched mix</option>
+              <option value="energy">Energy — medium blend</option>
+              <option value="quick_cut">Quick cut — short downbeat fade</option>
+            </select>
+          </label>
+
+          <label class="block text-sm">
+            <span class="mb-1 block font-medium">Beat matching</span>
+            <select v-model="beatStrictness" class="mt-2 w-full rounded-md border bg-background px-3 py-2">
+              <option value="strict">Strict — only near-identical tempo (±6%)</option>
+              <option value="normal">Normal — engine default (±8%)</option>
+              <option value="aggressive">Aggressive — stretch further (±12%)</option>
+            </select>
+          </label>
+
+          <label class="block text-sm">
             <span class="flex justify-between gap-3">
               <span class="font-medium">Lookahead</span>
-              <span class="text-muted-foreground">{{ lookahead }} track(s)</span>
+              <span class="text-muted-foreground">{{ lookahead }} ahead · beam {{ Math.min(96, Math.max(4, lookahead * 3)) }}</span>
             </span>
-            <input v-model.number="lookahead" type="range" min="1" max="32" step="1" class="mt-2 w-full" />
+            <input v-model.number="lookahead" type="range" min="1" max="96" step="1" class="mt-2 w-full" />
+            <span class="mt-1 block text-xs text-muted-foreground">Search width is lookahead × 3, capped at 96 tracks — a value of 32 already searches the full 96.</span>
           </label>
 
           <label class="block text-sm">
@@ -628,6 +660,16 @@ interface ApiResponse {
   current?: Analysis | null;
   tracks?: unknown[];
   applied?: boolean;
+  queue_changed?: boolean;
+  automix_applied?: boolean;
+  reason?: string;
+  optimized_window?: number;
+  queue_item_count?: number;
+  playlist_total?: number;
+  truncated?: boolean;
+  analysis_failed?: number;
+  analysis_rate_limited?: number;
+  degraded?: boolean;
 }
 interface SignalControl {
   state: SignalState;
@@ -654,6 +696,11 @@ const instrumental = ref("any");
 const explicit = ref("allow");
 const transitionBars = ref(8);
 const lookahead = ref(8);
+// Blend style + beat-match strictness feed the smart-fades planner through the
+// AutoMix pins (a blend INTO a track reads that track's pinned preferences).
+const transitionStyle = ref("auto");
+const completingMix = ref(false);
+const beatStrictness = ref("normal");
 const maxArtistRepeat = ref(1);
 const transitionAggressiveness = ref(0.5);
 const automix = ref(false);
@@ -664,6 +711,8 @@ const currentTrack = ref<SmartTrack | null>(null);
 const tracks = ref<SmartTrack[]>([]);
 const capabilities = ref<Capabilities | null>(null);
 const status = ref<ProviderStatus | null>(null);
+const optimizedWindow = ref(0);
+const queueItemCount = ref(0);
 const transitionOverrides = ref<Record<string, number>>({});
 const trackFlags = ref<Record<string, { required: boolean; fixed: boolean; excluded: boolean }>>({});
 let refreshGeneration = 0;
@@ -806,6 +855,8 @@ function buildControls(apply = false): RawObject {
     automix_enabled: autoMixAvailable.value && automix.value,
     smart_reorder_enabled: smartReorder.value,
     lookahead: lookahead.value,
+    transition_style: transitionStyle.value,
+    beat_strictness: beatStrictness.value,
     transition_aggressiveness: transitionAggressiveness.value,
     preserve_variety: preserveVariety.value,
     end_track_id: endTrackId.value || null,
@@ -830,6 +881,8 @@ function savePreferences(): void {
       explicit: explicit.value,
       transitionBars: transitionBars.value,
       lookahead: lookahead.value,
+      transitionStyle: transitionStyle.value,
+      beatStrictness: beatStrictness.value,
       maxArtistRepeat: maxArtistRepeat.value,
       transitionAggressiveness: transitionAggressiveness.value,
       automix: automix.value,
@@ -857,7 +910,9 @@ function restorePreferences(): void {
     if (typeof saved.instrumental === "string" && ["any", "prefer", "required"].includes(saved.instrumental)) instrumental.value = saved.instrumental;
     if (typeof saved.explicit === "string" && ["allow", "exclude"].includes(saved.explicit)) explicit.value = saved.explicit;
     if (typeof saved.transitionBars === "number" && [4, 8, 16, 32].includes(saved.transitionBars)) transitionBars.value = saved.transitionBars;
-    if (typeof saved.lookahead === "number") lookahead.value = Math.round(clamp(saved.lookahead, 1, 32));
+    if (typeof saved.lookahead === "number") lookahead.value = Math.round(clamp(saved.lookahead, 1, 96));
+    if (typeof saved.transitionStyle === "string" && ["auto", "full_blend", "energy", "quick_cut"].includes(saved.transitionStyle)) transitionStyle.value = saved.transitionStyle;
+    if (typeof saved.beatStrictness === "string" && ["strict", "normal", "aggressive"].includes(saved.beatStrictness)) beatStrictness.value = saved.beatStrictness;
     if (typeof saved.maxArtistRepeat === "number") maxArtistRepeat.value = Math.round(clamp(saved.maxArtistRepeat, 1, 20));
     if (typeof saved.transitionAggressiveness === "number") transitionAggressiveness.value = clamp(saved.transitionAggressiveness, 0, 1);
     if (typeof saved.automix === "boolean") automix.value = saved.automix;
@@ -891,6 +946,25 @@ function restorePreferences(): void {
     }
   } catch {
     // Ignore a malformed browser preference and continue with safe defaults.
+  }
+}
+async function completeMix(): Promise<void> {
+  const queueId = currentQueueId();
+  if (!queueId) return;
+  completingMix.value = true;
+  errorMessage.value = "";
+  try {
+    await api.sendCommand<ApiResponse>("smart_dj/complete_mix", {
+      queue_id: queueId,
+      count: 5,
+    });
+    await refresh();
+    toast.success("Complete mix: 5 compatible tracks appended from Musicae.");
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error);
+    toast.error(`Complete mix failed: ${errorMessage.value}`);
+  } finally {
+    completingMix.value = false;
   }
 }
 function clamp(value: number, min: number, max: number): number {
@@ -933,6 +1007,8 @@ function resetPreferences(): void {
   explicit.value = "allow";
   transitionBars.value = 8;
   lookahead.value = 8;
+  transitionStyle.value = "auto";
+  beatStrictness.value = "normal";
   maxArtistRepeat.value = 1;
   transitionAggressiveness.value = 0.5;
   automix.value = false;
@@ -993,6 +1069,8 @@ async function refresh(): Promise<void> {
     tracks.value = all.slice(1);
     pendingPlan.value = false;
     plannedControls = null;
+    if (typeof result?.optimized_window === 'number') optimizedWindow.value = result.optimized_window;
+    if (typeof result?.queue_item_count === 'number') queueItemCount.value = result.queue_item_count;
     await loadDiagnostics();
   } catch (error) {
     if (generation === refreshGeneration) errorMessage.value = error instanceof Error ? error.message : String(error);
@@ -1058,7 +1136,17 @@ async function applyPlan(): Promise<void> {
     tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).map((item) => decorate(item, oldById));
     pendingPlan.value = false;
     plannedControls = null;
-    toast.success(result?.applied === false ? "The server returned a plan but did not apply it." : "Smart DJ queue order applied.");
+    if (result?.applied === false) {
+      const why = result?.reason ? result.reason.replaceAll("_", " ") : "reorder was not applied";
+      toast.info(`Queue unchanged — ${why}.`);
+    } else if (result?.queue_changed === true) {
+      toast.success("Smart DJ queue order applied.");
+    } else if (result?.automix_applied === true) {
+      toast.success("AutoMix crossfades applied; queue order unchanged.");
+    } else {
+      // applied missing (pre-0.0.20 server) or true without confirmation — report what we know
+      toast.info("Request sent — verify the queue order.");
+    }
     await refresh();
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error);
