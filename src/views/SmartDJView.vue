@@ -241,7 +241,7 @@
             <div
               class="w-full rounded-sm bg-primary/80 transition-[height] duration-300"
               :style="{ height: `${Math.max(4, point.energy * 100)}%` }"
-            />
+            ></div>
           </div>
           <span class="w-full truncate text-center text-[10px] text-muted-foreground">
             {{ point.index + 1 }}
@@ -853,7 +853,7 @@ function restorePreferences(): void {
     if (typeof saved.bpmMax === "number" || saved.bpmMax === null) bpmMax.value = saved.bpmMax as number | null;
     if (typeof saved.maxBpmJump === "number" || saved.maxBpmJump === null) maxBpmJump.value = saved.maxBpmJump as number | null;
     if (typeof saved.bpmTolerance === "number") bpmTolerance.value = clamp(saved.bpmTolerance, 0.01, 1);
-    if (typeof saved.keyRelation === "string" && ["compatible", "same", "any"].includes(saved.keyRelation)) keyRelation.value = saved.keyRelation;
+    if (typeof saved.keyRelation === "string" && ["compatible", "same", "soft", "any"].includes(saved.keyRelation)) keyRelation.value = saved.keyRelation;
     if (typeof saved.instrumental === "string" && ["any", "prefer", "required"].includes(saved.instrumental)) instrumental.value = saved.instrumental;
     if (typeof saved.explicit === "string" && ["allow", "exclude"].includes(saved.explicit)) explicit.value = saved.explicit;
     if (typeof saved.transitionBars === "number" && [4, 8, 16, 32].includes(saved.transitionBars)) transitionBars.value = saved.transitionBars;
