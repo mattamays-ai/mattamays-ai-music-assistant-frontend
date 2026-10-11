@@ -685,10 +685,12 @@ function currentQueueId(): string | null {
   return activeQueue.value?.queue_id ?? null;
 }
 function savePreferences() {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
       mode: mode.value,
+      analysisProvider: analysisProvider.value,
       bpmMin: bpmMin.value,
       bpmMax: bpmMax.value,
       maxBpmJump: maxBpmJump.value,
@@ -708,8 +710,11 @@ function savePreferences() {
         JSON.stringify(transitionOverrides.value),
       ),
       signals: JSON.parse(JSON.stringify(signals)),
-    }),
-  );
+      }),
+    );
+  } catch {
+    // Browser storage may be disabled or full; Smart DJ must remain usable.
+  }
 }
 function restorePreferences() {
   try {
@@ -717,7 +722,12 @@ function restorePreferences() {
       localStorage.getItem(STORAGE_KEY) || "{}",
     ) as Record<string, unknown>;
     for (const [key, setter] of Object.entries({
-      mode: (v: unknown) => (mode.value = String(v)),
+      mode: (v: unknown) =>
+        (mode.value = ["ai_dj", "party", "chill", "workout", "custom"].includes(
+          String(v),
+        )
+          ? String(v)
+          : "ai_dj"),
       analysisProvider: (v: unknown) =>
         (analysisProvider.value = [
           "auto",
@@ -726,24 +736,60 @@ function restorePreferences() {
         ].includes(String(v))
           ? String(v)
           : "auto"),
-      bpmMin: (v: unknown) => (bpmMin.value = typeof v === "number" ? v : null),
-      bpmMax: (v: unknown) => (bpmMax.value = typeof v === "number" ? v : null),
+      bpmMin: (v: unknown) =>
+        (bpmMin.value =
+          typeof v === "number" && Number.isFinite(v)
+            ? Math.max(1, Math.min(300, v))
+            : null),
+      bpmMax: (v: unknown) =>
+        (bpmMax.value =
+          typeof v === "number" && Number.isFinite(v)
+            ? Math.max(1, Math.min(300, v))
+            : null),
       maxBpmJump: (v: unknown) =>
-        (maxBpmJump.value = typeof v === "number" ? v : null),
+        (maxBpmJump.value =
+          typeof v === "number" && Number.isFinite(v)
+            ? Math.max(0, Math.min(100, v))
+            : null),
       bpmTolerance: (v: unknown) =>
-        (bpmTolerance.value = typeof v === "number" ? v : 0.08),
-      keyRelation: (v: unknown) => (keyRelation.value = String(v)),
-      instrumental: (v: unknown) => (instrumental.value = String(v)),
-      explicit: (v: unknown) => (explicit.value = String(v)),
-      transitionBars: (v: unknown) => (transitionBars.value = Number(v) || 8),
-      lookahead: (v: unknown) => (lookahead.value = Number(v) || 4),
-      maxArtistRepeat: (v: unknown) =>
-        (maxArtistRepeat.value = Math.max(1, Number(v) || 1)),
-      transitionAggressiveness: (v: unknown) =>
-        (transitionAggressiveness.value = Number(v) || 0.5),
-      automix: (v: unknown) => (automix.value = Boolean(v)),
-      smartReorder: (v: unknown) => (smartReorder.value = v !== false),
-      preserveVariety: (v: unknown) => (preserveVariety.value = v !== false),
+        (bpmTolerance.value =
+          typeof v === "number" && Number.isFinite(v)
+            ? Math.max(0.01, Math.min(1, v))
+            : 0.08),
+      keyRelation: (v: unknown) =>
+        (keyRelation.value = ["compatible", "same", "any"].includes(String(v))
+          ? String(v)
+          : "compatible"),
+      instrumental: (v: unknown) =>
+        (instrumental.value = ["any", "prefer", "required"].includes(String(v))
+          ? String(v)
+          : "any"),
+      explicit: (v: unknown) =>
+        (explicit.value = ["allow", "exclude"].includes(String(v))
+          ? String(v)
+          : "allow"),
+      transitionBars: (v: unknown) =>
+        (transitionBars.value = [4, 8, 16, 32].includes(Number(v))
+          ? Number(v)
+          : 8),
+      lookahead: (v: unknown) =>
+        (lookahead.value = [1, 2, 4, 8, 16, 32].includes(Number(v))
+          ? Number(v)
+          : 4),
+      maxArtistRepeat: (v: unknown) => {
+        const n = Number(v);
+        maxArtistRepeat.value =
+          Number.isFinite(n) ? Math.max(1, Math.min(20, Math.trunc(n))) : 1;
+      },
+      transitionAggressiveness: (v: unknown) => {
+        const n = Number(v);
+        transitionAggressiveness.value = Number.isFinite(n)
+          ? Math.max(0, Math.min(1, n))
+          : 0.5;
+      },
+      automix: (v: unknown) => (automix.value = v === true),
+      smartReorder: (v: unknown) => (smartReorder.value = v === true),
+      preserveVariety: (v: unknown) => (preserveVariety.value = v === true),
       endTrackId: (v: unknown) => (endTrackId.value = String(v || "")),
       transitionOverrides: (v: unknown) => {
         if (v && typeof v === "object" && !Array.isArray(v)) {
@@ -758,10 +804,25 @@ function restorePreferences() {
     })) {
       if (key in saved) setter(saved[key]);
     }
-    const savedSignals = saved.signals as Record<string, Signal> | undefined;
-    if (savedSignals)
-      for (const name of signalNames)
-        if (savedSignals[name]) signals[name] = savedSignals[name];
+    const savedSignals = saved.signals as Record<string, unknown> | undefined;
+    if (savedSignals) {
+      for (const name of signalNames) {
+        const candidate = savedSignals[name];
+        if (!candidate || typeof candidate !== "object" || Array.isArray(candidate))
+          continue;
+        const value = candidate as Record<string, unknown>;
+        const state = ["hard", "soft", "disabled"].includes(String(value.state))
+          ? (String(value.state) as Signal["state"])
+          : "soft";
+        const weight = Number(value.weight);
+        signals[name] = {
+          state,
+          weight: Number.isFinite(weight)
+            ? Math.max(0, Math.min(3, weight))
+            : 1,
+        };
+      }
+    }
   } catch {
     /* ignore malformed local preferences */
   }
@@ -773,6 +834,7 @@ async function refresh() {
     tracks.value = [];
     pendingPlan.value = false;
     plannedControls = null;
+    loading.value = false;
     return;
   }
   loading.value = true;
@@ -804,6 +866,7 @@ async function refresh() {
 async function plan() {
   const queueId = currentQueueId();
   if (!queueId || !tracks.value.length) return;
+  const generation = refreshGeneration;
   loading.value = true;
   try {
     const result = await api.sendCommand<SmartDjCommandResponse>(
@@ -817,6 +880,7 @@ async function plan() {
         controls: buildControls(false),
       },
     );
+    if (generation !== refreshGeneration || currentQueueId() !== queueId) return;
     const previous = new Map(tracks.value.map((t) => [t.queue_item_id, t]));
     tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).map(
       (x) => decorate(x, previous),
@@ -824,14 +888,17 @@ async function plan() {
     plannedControls = buildControls(false);
     pendingPlan.value = true;
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : String(error));
+    if (generation === refreshGeneration && currentQueueId() === queueId)
+      toast.error(error instanceof Error ? error.message : String(error));
   } finally {
-    loading.value = false;
+    if (generation === refreshGeneration && currentQueueId() === queueId)
+      loading.value = false;
   }
 }
 async function applyPlan() {
   const queueId = currentQueueId();
   if (!queueId || !pendingPlan.value) return;
+  const generation = refreshGeneration;
   loading.value = true;
   try {
     const result = await api.sendCommand<SmartDjCommandResponse>(
@@ -847,6 +914,7 @@ async function applyPlan() {
           : buildControls(true),
       },
     );
+    if (generation !== refreshGeneration || currentQueueId() !== queueId) return;
     const previous = new Map(tracks.value.map((t) => [t.queue_item_id, t]));
     tracks.value = (Array.isArray(result?.tracks) ? result.tracks : []).map(
       (x) => decorate(x, previous),
@@ -855,9 +923,11 @@ async function applyPlan() {
     plannedControls = null;
     toast.success($t("providers.smart_dj.applied"));
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : String(error));
+    if (generation === refreshGeneration && currentQueueId() === queueId)
+      toast.error(error instanceof Error ? error.message : String(error));
   } finally {
-    loading.value = false;
+    if (generation === refreshGeneration && currentQueueId() === queueId)
+      loading.value = false;
   }
 }
 watch(
