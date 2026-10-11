@@ -368,8 +368,18 @@
                 >Energy {{ track.energy_delta > 0 ? "+" : ""
                 }}{{ Math.round(track.energy_delta * 100) }}%</span
               >
-              <span v-if="track.transition_bars"
-                >Blend {{ track.transition_bars }} bars</span
+              <span v-if="track.clap_similarity != null"
+                >Sonic {{ Math.round(track.clap_similarity * 100) }}%</span
+              >
+              <span v-if="effectiveBars(track) === 0"
+                >Hard cut{{
+                  track.transition_override != null ? " (edited)" : ""
+                }}</span
+              >
+              <span v-else-if="effectiveBars(track)"
+                >Blend {{ effectiveBars(track) }} bars{{
+                  track.transition_override != null ? " (edited)" : ""
+                }}</span
               >
               <span v-if="track.reasons?.length">{{
                 track.reasons.join(" · ")
@@ -391,6 +401,27 @@
             <label class="flex items-center gap-1"
               ><input v-model="track.excluded" type="checkbox" />
               {{ $t("providers.smart_dj.excluded") }}</label
+            >
+            <label class="flex items-center gap-1"
+              >Transition
+              <select
+                :value="track.transition_override ?? ''"
+                class="rounded border bg-card px-1 py-0.5"
+                @change="
+                  track.transition_override =
+                    ($event.target as HTMLSelectElement).value === ''
+                      ? null
+                      : Number(($event.target as HTMLSelectElement).value);
+                  onOverrideChange(track);
+                "
+              >
+                <option value="">Auto</option>
+                <option value="4">4 bars</option>
+                <option value="8">8 bars</option>
+                <option value="16">16 bars</option>
+                <option value="32">32 bars</option>
+                <option value="0">Hard cut</option>
+              </select></label
             >
           </div>
         </div>
@@ -480,6 +511,8 @@ interface SmartTrack {
   energy_delta?: number | null;
   key_affinity?: number | null;
   transition_bars?: number | null;
+  clap_similarity?: number | null;
+  transition_override?: number | null;
   required: boolean;
   fixed: boolean;
   excluded: boolean;
@@ -515,8 +548,9 @@ const bpmTolerance = ref(0.08),
   keyRelation = ref("compatible"),
   instrumental = ref("any"),
   explicit = ref("allow");
-const transitionBars = ref(8),
-  lookahead = ref(4),
+const transitionBars = ref(8);
+const transitionOverrides = ref<Record<string, number>>({});
+const lookahead = ref(4),
   maxArtistRepeat = ref(1),
   transitionAggressiveness = ref(0.5);
 const automix = ref(false),
@@ -593,6 +627,9 @@ function decorate(v: unknown, previous?: Map<string, SmartTrack>): SmartTrack {
     key_affinity: typeof a.key_affinity === "number" ? a.key_affinity : null,
     transition_bars:
       typeof a.transition_bars === "number" ? a.transition_bars : null,
+    clap_similarity:
+      typeof a.clap_similarity === "number" ? a.clap_similarity : null,
+    transition_override: old?.transition_override ?? null,
     required: old?.required ?? Boolean(a.required),
     fixed: old?.fixed ?? Boolean(a.fixed),
     excluded: old?.excluded ?? Boolean(a.excluded),
@@ -611,6 +648,7 @@ function buildControls(apply = false) {
     instrumental: instrumental.value,
     explicit: explicit.value,
     transition_bars: transitionBars.value,
+    transition_bars_overrides: { ...transitionOverrides.value },
     automix_enabled: automix.value,
     smart_reorder_enabled: smartReorder.value,
     lookahead: lookahead.value,
@@ -626,6 +664,22 @@ function buildControls(apply = false) {
       .filter((t) => t.excluded)
       .map((t) => t.queue_item_id),
   };
+}
+function effectiveBars(track: SmartTrack): number | null {
+  if (track.transition_override != null) return track.transition_override;
+  return track.transition_bars ?? null;
+}
+function onOverrideChange(track: SmartTrack): void {
+  const raw: unknown = track.transition_override;
+  if (raw == null || raw === "") {
+    track.transition_override = null;
+    delete transitionOverrides.value[track.queue_item_id];
+  } else {
+    const bars = Number(raw);
+    track.transition_override = bars;
+    transitionOverrides.value[track.queue_item_id] = bars;
+  }
+  savePreferences();
 }
 function currentQueueId(): string | null {
   return activeQueue.value?.queue_id ?? null;
@@ -650,6 +704,9 @@ function savePreferences() {
       smartReorder: smartReorder.value,
       preserveVariety: preserveVariety.value,
       endTrackId: endTrackId.value,
+      transitionOverrides: JSON.parse(
+        JSON.stringify(transitionOverrides.value),
+      ),
       signals: JSON.parse(JSON.stringify(signals)),
     }),
   );
@@ -688,6 +745,16 @@ function restorePreferences() {
       smartReorder: (v: unknown) => (smartReorder.value = v !== false),
       preserveVariety: (v: unknown) => (preserveVariety.value = v !== false),
       endTrackId: (v: unknown) => (endTrackId.value = String(v || "")),
+      transitionOverrides: (v: unknown) => {
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          const clean: Record<string, number> = {};
+          for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+            const n = Number(val);
+            if ([0, 4, 8, 16, 32].includes(n)) clean[k] = n;
+          }
+          transitionOverrides.value = clean;
+        }
+      },
     })) {
       if (key in saved) setter(saved[key]);
     }
