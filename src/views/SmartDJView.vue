@@ -301,6 +301,12 @@
               <option value="radio">
                 Radio — sequential handover, decks never blend
               </option>
+              <option value="echo_out">
+                Echo out — tail echoes over the incoming track
+              </option>
+              <option value="filter_out">
+                Filter out — sweep the outgoing track away
+              </option>
             </select>
             <span class="mt-1 block text-xs text-muted-foreground">
               Auto picks full blends for dance material and radio handovers for
@@ -1137,6 +1143,27 @@
         pendingPlan ? "A plan is waiting for approval." : "No unapplied plan."
       }}</span>
     </div>
+    <div v-if="transitionNotes.length" class="mt-3 space-y-1">
+      <div class="text-xs font-medium">Transition report</div>
+      <ul class="space-y-0.5">
+        <li
+          v-for="(note, index) in transitionNotes"
+          :key="index"
+          class="text-xs text-muted-foreground"
+        >
+          → {{ note.to ?? "next track" }}
+          <span v-if="note.style"> · {{ note.style }}</span>
+          <span v-if="note.bpm_delta_pct != null">
+            · {{ note.bpm_delta_pct.toFixed(1) }}% BPM
+          </span>
+          <span v-if="note.key_distance != null">
+            · key {{ note.key_distance.toFixed(2) }}
+          </span>
+          <span v-if="note.both_vocal"> · both vocal</span>
+          <span v-if="note.source"> · {{ note.source }}</span>
+        </li>
+      </ul>
+    </div>
   </section>
 </template>
 
@@ -1259,8 +1286,19 @@ interface ApiResponse {
   analysis_failed?: number;
   analysis_rate_limited?: number;
   degraded?: boolean;
+  transition_notes?: TransitionNote[];
+  saved?: boolean;
   added?: unknown[];
   seed?: { name?: string } | null;
+}
+interface TransitionNote {
+  to: string | null;
+  bpm_delta_pct: number | null;
+  key_distance: number | null;
+  both_vocal: boolean;
+  style: string | null;
+  strictness: string | null;
+  source: string | null;
 }
 interface LibraryScanState {
   running: boolean;
@@ -1288,6 +1326,7 @@ const loading = ref(false);
 const diagnosticsLoading = ref(false);
 const pendingPlan = ref(false);
 const errorMessage = ref("");
+const transitionNotes = ref<TransitionNote[]>([]);
 const mode = ref("ai_dj");
 const analysisProvider = ref("auto");
 const bpmMin = ref<number | null>(null);
@@ -1638,9 +1677,15 @@ function restorePreferences(): void {
       lookahead.value = Math.round(clamp(saved.lookahead, 1, 96));
     if (
       typeof saved.transitionStyle === "string" &&
-      ["auto", "full_blend", "energy", "quick_cut", "radio"].includes(
-        saved.transitionStyle,
-      )
+      [
+        "auto",
+        "full_blend",
+        "energy",
+        "quick_cut",
+        "radio",
+        "echo_out",
+        "filter_out",
+      ].includes(saved.transitionStyle)
     )
       transitionStyle.value = saved.transitionStyle;
     if (
@@ -1958,6 +2003,7 @@ async function refresh(): Promise<void> {
       optimizedWindow.value = result.optimized_window;
     if (typeof result?.queue_item_count === "number")
       queueItemCount.value = result.queue_item_count;
+    reportPlanWarnings(result);
     await loadDiagnostics();
   } catch (error) {
     if (generation === refreshGeneration)
@@ -1966,6 +2012,21 @@ async function refresh(): Promise<void> {
   } finally {
     if (generation === refreshGeneration) loading.value = false;
   }
+}
+function reportPlanWarnings(result: ApiResponse | undefined): void {
+  // The server reports shortfalls instead of failing; surface them so a
+  // partial plan never looks like a complete one.
+  const notes: string[] = [];
+  if (result?.degraded === true) notes.push("some tracks used cached data");
+  if (
+    typeof result?.analysis_rate_limited === "number" &&
+    result.analysis_rate_limited > 0
+  )
+    notes.push(`${result.analysis_rate_limited} track(s) rate-limited`);
+  if (typeof result?.analysis_failed === "number" && result.analysis_failed > 0)
+    notes.push(`${result.analysis_failed} track(s) failed analysis`);
+  if (result?.truncated === true) notes.push("the list was truncated");
+  if (notes.length) toast.info(`Partial analysis — ${notes.join("; ")}.`);
 }
 async function plan(): Promise<void> {
   const queueId = currentQueueId();
@@ -2006,6 +2067,9 @@ async function plan(): Promise<void> {
     tracks.value = [...ranked, ...excludedNotReturned];
     plannedControls = controls;
     pendingPlan.value = true;
+    transitionNotes.value = Array.isArray(result?.transition_notes)
+      ? result.transition_notes
+      : [];
     savePreferences();
     toast.success("Plan ready. Review it before applying.");
   } catch (error) {
