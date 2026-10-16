@@ -811,7 +811,11 @@
                 {{ result.name }}
               </p>
               <p class="truncate text-xs text-muted-foreground">
-                {{ result.artists?.map((a) => a.name).join(", ") || "" }}
+                {{
+                  result.artists
+                    ?.map((artist: { name: string }) => artist.name)
+                    .join(", ") || ""
+                }}
               </p>
             </div>
             <Button
