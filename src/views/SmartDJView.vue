@@ -1170,10 +1170,11 @@ import {
   Square,
   WandSparkles,
 } from "@lucide/vue";
-import type {
-  MediaItemImage,
-  Track,
-} from "@music-assistant/frontend-plugins/types";
+import {
+  QueueOption,
+  type MediaItemImage,
+  type Track,
+} from "@/plugins/api/interfaces";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { toast } from "vue-sonner";
 
@@ -1905,7 +1906,7 @@ async function playGapTrack(track: Track): Promise<void> {
   const queueId = currentQueueId();
   if (!queueId || !track.uri) return;
   try {
-    await api.playMedia(track.uri, "play", { queue_id: queueId });
+    await api.playMedia(track.uri, QueueOption.PLAY, { queue_id: queueId });
     justAdded.value = new Set();
     gapSlotOpen.value = false;
     toast.success(`Playing ${track.name} — the mix re-anchors around it.`);
