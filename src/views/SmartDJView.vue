@@ -7,16 +7,12 @@
         <div class="flex items-center gap-2">
           <Sparkles class="h-6 w-6" aria-hidden="true" />
           <h1 class="text-2xl font-semibold tracking-tight">Smart DJ</h1>
-          <span
-            class="rounded-full border px-2 py-0.5 text-xs"
-            :class="
-              status?.configured
-                ? 'border-emerald-500/50 text-emerald-600'
-                : 'border-amber-500/50 text-amber-600'
-            "
+          <Badge
+            :variant="status?.configured ? 'default' : 'outline'"
+            class="rounded-full"
           >
             {{ status?.configured ? "Analysis ready" : "Local analysis only" }}
-          </span>
+          </Badge>
         </div>
         <p class="mt-1 text-sm text-muted-foreground">
           Plan a mix, inspect every decision, then apply it to the upcoming
@@ -71,8 +67,8 @@
       >
     </div>
 
-    <!-- Phase 1: a quick-glance workstation. -->
     <div class="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+      <!-- Live queue workstation -->
       <section class="rounded-xl border bg-card p-4 shadow-sm md:p-5">
         <div class="mb-4 flex items-center justify-between gap-3">
           <div>
@@ -91,12 +87,9 @@
               </template>
             </p>
           </div>
-          <span
-            v-if="pendingPlan"
-            class="rounded-full border px-2 py-1 text-xs"
-          >
+          <Badge v-if="pendingPlan" variant="secondary" class="rounded-full">
             Plan ready — not applied
-          </span>
+          </Badge>
         </div>
 
         <div class="grid gap-3 md:grid-cols-2">
@@ -113,22 +106,21 @@
               <p class="truncate text-sm text-muted-foreground">
                 {{ currentTrack.artist || "Unknown artist" }}
               </p>
-              <div class="mt-3 flex flex-wrap gap-2 text-xs">
-                <span class="rounded border px-2 py-1"
-                  >{{ bpmLabel(currentTrack.analysis?.bpm) }} BPM</span
+              <div class="mt-3 flex flex-wrap gap-2">
+                <Badge variant="outline"
+                  >{{ bpmLabel(currentTrack.analysis?.bpm) }} BPM</Badge
                 >
-                <span
+                <Badge
                   v-if="currentTrack.analysis?.camelot"
-                  class="rounded border px-2 py-1"
+                  variant="outline"
+                  >{{ currentTrack.analysis.camelot }}</Badge
                 >
-                  {{ currentTrack.analysis.camelot }}
-                </span>
-                <span
+                <Badge
                   v-if="currentTrack.analysis?.energy != null"
-                  class="rounded border px-2 py-1"
+                  variant="outline"
                 >
                   Energy {{ pct(currentTrack.analysis.energy) }}
-                </span>
+                </Badge>
               </div>
             </template>
             <p v-else class="text-sm text-muted-foreground">
@@ -149,22 +141,16 @@
               <p class="truncate text-sm text-muted-foreground">
                 {{ tracks[0].artist || "Unknown artist" }}
               </p>
-              <div class="mt-3 flex flex-wrap gap-2 text-xs">
-                <span class="rounded border px-2 py-1"
-                  >{{ bpmLabel(tracks[0].analysis?.bpm) }} BPM</span
+              <div class="mt-3 flex flex-wrap gap-2">
+                <Badge variant="outline"
+                  >{{ bpmLabel(tracks[0].analysis?.bpm) }} BPM</Badge
                 >
-                <span
-                  v-if="tracks[0].analysis?.camelot"
-                  class="rounded border px-2 py-1"
-                >
+                <Badge v-if="tracks[0].analysis?.camelot" variant="outline">
                   {{ tracks[0].analysis.camelot }}
-                </span>
-                <span
-                  v-if="tracks[0].score != null"
-                  class="rounded border px-2 py-1"
-                >
+                </Badge>
+                <Badge v-if="tracks[0].score != null" variant="outline">
                   {{ Math.round(tracks[0].score * 100) }}% match
-                </span>
+                </Badge>
               </div>
             </template>
             <p v-else class="text-sm text-muted-foreground">
@@ -215,9 +201,9 @@
           <div class="rounded-lg border p-3 text-sm">
             <div class="flex items-center justify-between gap-2">
               <span class="font-medium">AutoMix execution</span>
-              <span class="rounded-full border px-2 py-0.5 text-xs">
+              <Badge variant="outline" class="rounded-full">
                 {{ autoMixAvailable ? "Available" : "Backend unavailable" }}
-              </span>
+              </Badge>
             </div>
             <label class="mt-2 flex items-center justify-between gap-3">
               <span class="text-xs text-muted-foreground"
@@ -253,17 +239,35 @@
                 completingMix ? "Completing…" : "Complete mix (add 5 tracks)"
               }}
             </button>
+            <button
+              v-if="justAdded.size"
+              type="button"
+              class="mt-2 w-full rounded-md border border-dashed px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent"
+              @click="justAdded = new Set()"
+            >
+              Clear "Smart DJ added" highlights ({{ justAdded.size }})
+            </button>
           </div>
         </div>
       </section>
 
-      <section class="rounded-xl border bg-card p-4 shadow-sm md:p-5">
-        <div class="mb-4 flex items-center gap-2">
-          <SlidersHorizontal class="h-5 w-5" />
-          <h2 class="text-lg font-semibold">Mix behavior</h2>
-        </div>
-
-        <div class="space-y-4">
+      <!-- Collapsible: mix behavior -->
+      <details class="rounded-xl border bg-card shadow-sm" open>
+        <summary
+          class="flex cursor-pointer list-none items-center justify-between gap-3 p-4 md:p-5"
+        >
+          <div class="flex items-center gap-2">
+            <SlidersHorizontal class="h-5 w-5" />
+            <div>
+              <h2 class="text-lg font-semibold">Mix behavior</h2>
+              <p class="text-sm text-muted-foreground">
+                Transition length, style, strictness, lookahead
+              </p>
+            </div>
+          </div>
+          <ChevronDown class="h-4 w-4 shrink-0" />
+        </summary>
+        <div class="space-y-4 border-t p-4 md:p-5">
           <label class="block text-sm">
             <span class="flex justify-between gap-3">
               <span class="font-medium">Transition length</span>
@@ -288,13 +292,20 @@
               v-model="transitionStyle"
               class="mt-2 w-full rounded-md border bg-background px-3 py-2"
             >
-              <option value="auto">Auto — engine decides</option>
+              <option value="auto">Auto — genre defaults decide</option>
               <option value="full_blend">
                 Full blend — long beat-matched mix
               </option>
               <option value="energy">Energy — medium blend</option>
               <option value="quick_cut">Quick cut — short downbeat fade</option>
+              <option value="radio">
+                Radio — sequential handover, decks never blend
+              </option>
             </select>
+            <span class="mt-1 block text-xs text-muted-foreground">
+              Auto picks full blends for dance material and radio handovers for
+              vocal-dense or live material. An explicit pick always wins.
+            </span>
           </label>
 
           <label class="block text-sm">
@@ -375,10 +386,126 @@
             <input v-model="preserveVariety" type="checkbox" class="h-4 w-4" />
           </label>
         </div>
-      </section>
+      </details>
     </div>
 
-    <!-- Phase 3: planned trajectory, using only known analysis values. -->
+    <!-- Collapsible: library analysis tools -->
+    <details class="rounded-xl border bg-card shadow-sm" open>
+      <summary
+        class="flex cursor-pointer list-none items-center justify-between gap-3 p-4 md:p-5"
+      >
+        <div class="flex items-center gap-2">
+          <LibraryBig class="h-5 w-5" />
+          <div>
+            <h2 class="text-lg font-semibold">Library analysis</h2>
+            <p class="text-sm text-muted-foreground">
+              Backfill the local analyzer for the whole library, then build a
+              ready-to-mix playlist from the analyzed tracks
+            </p>
+          </div>
+        </div>
+        <ChevronDown class="h-4 w-4 shrink-0" />
+      </summary>
+      <div class="grid gap-4 border-t p-4 md:grid-cols-2 md:p-5">
+        <!-- sweep -->
+        <div class="rounded-lg border p-4">
+          <h3 class="font-medium">Analyze entire library</h3>
+          <p class="mt-1 text-sm text-muted-foreground">
+            Streams every unanalyzed track silently through the local analyzer
+            (no quota, audio never stored). Pauses itself while you are playing
+            music and resumes when idle.
+          </p>
+          <div
+            v-if="sweep && (sweep.running || sweep.total)"
+            class="mt-3 space-y-2"
+          >
+            <Progress :model-value="sweepProgressPct" />
+            <div
+              class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
+            >
+              <span>
+                {{ sweep.analyzed }} analyzed · {{ sweep.skipped }} already had
+                data · {{ sweep.failed }} failed · {{ sweep.total }} total
+              </span>
+              <Badge
+                v-if="sweep.deferring"
+                variant="secondary"
+                class="rounded-full"
+              >
+                <PauseCircle class="mr-1 h-3 w-3" /> paused — music is playing
+              </Badge>
+            </div>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              :disabled="!!sweep?.running"
+              @click="startLibraryScan()"
+            >
+              <Spinner
+                v-if="sweep?.running"
+                class="mr-2 h-4 w-4"
+                :show="true"
+              />
+              <DatabaseZap v-else class="mr-2 h-4 w-4" />
+              {{ sweep?.running ? "Analyzing…" : "Analyze entire library" }}
+            </Button>
+            <Button
+              v-if="sweep?.running"
+              size="sm"
+              variant="outline"
+              @click="cancelLibraryScan()"
+            >
+              <Square class="mr-2 h-3.5 w-3.5" />
+              Cancel
+            </Button>
+          </div>
+          <p
+            v-if="sweep && !sweep.running && sweep.finished_at"
+            class="mt-2 text-xs text-muted-foreground"
+          >
+            Last sweep finished: {{ sweep.analyzed }} new ·
+            {{ sweep.skipped }} skipped · {{ sweep.failed }} failed
+            <template v-if="sweep.cancelled"> · cancelled</template>
+          </p>
+        </div>
+
+        <!-- create analyzed playlist -->
+        <div class="rounded-lg border p-4">
+          <h3 class="font-medium">Create playlist from analyzed tracks</h3>
+          <p class="mt-1 text-sm text-muted-foreground">
+            Builds a playlist out of the tracks that HAVE full analysis data — a
+            guaranteed ready-to-mix pool. Add a search to narrow it (name,
+            artist, genre).
+          </p>
+          <div class="mt-3 space-y-2">
+            <input
+              v-model="analyzedPlaylistName"
+              type="text"
+              placeholder="Playlist name"
+              class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            />
+            <input
+              v-model="analyzedPlaylistSearch"
+              type="text"
+              placeholder="Search filter (optional) — e.g. techno"
+              class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            />
+            <Button
+              size="sm"
+              class="w-full"
+              :disabled="creatingPlaylist"
+              @click="createAnalyzedPlaylist()"
+            >
+              <ListPlus class="mr-2 h-4 w-4" />
+              {{ creatingPlaylist ? "Creating…" : "Create playlist" }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <!-- Energy journey -->
     <section class="rounded-xl border bg-card p-4 shadow-sm md:p-5">
       <div
         class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"
@@ -434,7 +561,7 @@
       </div>
     </section>
 
-    <!-- Phase 2: explainable queue and user-enforced constraints. -->
+    <!-- Intelligent queue with album art rows -->
     <section class="rounded-xl border bg-card p-4 shadow-sm md:p-5">
       <div
         class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
@@ -446,14 +573,10 @@
             applying.
           </p>
         </div>
-        <div class="flex flex-wrap gap-2 text-xs">
-          <span class="rounded border px-2 py-1"
-            >Required: {{ requiredCount }}</span
-          >
-          <span class="rounded border px-2 py-1">Fixed: {{ fixedCount }}</span>
-          <span class="rounded border px-2 py-1"
-            >Excluded: {{ excludedCount }}</span
-          >
+        <div class="flex flex-wrap gap-2">
+          <Badge variant="outline">Required: {{ requiredCount }}</Badge>
+          <Badge variant="outline">Fixed: {{ fixedCount }}</Badge>
+          <Badge variant="outline">Excluded: {{ excludedCount }}</Badge>
         </div>
       </div>
 
@@ -461,100 +584,108 @@
         <article
           v-for="(track, index) in tracks"
           :key="track.queue_item_id"
-          class="rounded-lg border p-3"
+          class="relative overflow-hidden rounded-lg border p-3"
           :class="{
-            'border-primary/60 bg-primary/5': track.fixed,
+            'border-primary/60': track.fixed,
             'opacity-60': track.excluded,
           }"
         >
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-start">
+          <!-- album art behind the row -->
+          <img
+            v-if="artworkUrl(track)"
+            :src="artworkUrl(track)"
+            :alt="''"
+            aria-hidden="true"
+            class="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-15 blur-md dark:opacity-20"
+          />
+          <div
+            class="relative z-10 flex flex-col gap-3 lg:flex-row lg:items-start"
+          >
             <div class="flex min-w-0 flex-1 gap-3">
               <div
-                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-semibold"
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background/80 text-sm font-semibold shadow-sm backdrop-blur"
               >
                 {{ index + 1 }}
               </div>
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-2">
-                  <h3 class="truncate font-medium">
+                  <h3 class="truncate font-medium drop-shadow-sm">
                     {{ track.name || "Unknown track" }}
                   </h3>
-                  <span
+                  <Badge
+                    v-if="justAdded.has(track.name)"
+                    class="rounded-full"
+                    variant="default"
+                  >
+                    <Sparkles class="mr-1 h-3 w-3" /> Smart DJ added
+                  </Badge>
+                  <Badge
                     v-if="track.fixed"
-                    class="rounded border px-2 py-0.5 text-[10px]"
-                    >Fixed position</span
+                    variant="secondary"
+                    class="rounded-full"
+                    >Fixed position</Badge
                   >
-                  <span
+                  <Badge
                     v-if="track.required"
-                    class="rounded border px-2 py-0.5 text-[10px]"
-                    >Required</span
+                    variant="secondary"
+                    class="rounded-full"
+                    >Required</Badge
                   >
-                  <span
+                  <Badge
                     v-if="track.excluded"
-                    class="rounded border border-destructive/50 px-2 py-0.5 text-[10px] text-destructive"
-                    >Excluded</span
+                    variant="destructive"
+                    class="rounded-full"
+                    >Excluded</Badge
                   >
                 </div>
-                <p class="truncate text-sm text-muted-foreground">
+                <p
+                  class="truncate text-sm text-muted-foreground drop-shadow-sm"
+                >
                   {{ track.artist || "Unknown artist" }}
                 </p>
 
-                <div class="mt-2 flex flex-wrap gap-2 text-xs">
-                  <span
-                    v-if="track.analysis?.bpm != null"
-                    class="rounded bg-muted px-2 py-1"
-                    >{{ bpmLabel(track.analysis.bpm) }} BPM</span
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <Badge v-if="track.analysis?.bpm != null" variant="secondary"
+                    >{{ bpmLabel(track.analysis.bpm) }} BPM</Badge
                   >
-                  <span
-                    v-if="track.analysis?.camelot"
-                    class="rounded bg-muted px-2 py-1"
-                    >{{ track.analysis.camelot }}</span
-                  >
-                  <span
+                  <Badge v-if="track.analysis?.camelot" variant="secondary">{{
+                    track.analysis.camelot
+                  }}</Badge>
+                  <Badge
                     v-if="track.analysis?.energy != null"
-                    class="rounded bg-muted px-2 py-1"
-                    >Energy {{ pct(track.analysis.energy) }}</span
+                    variant="secondary"
+                    >Energy {{ pct(track.analysis.energy) }}</Badge
                   >
-                  <span
+                  <Badge
                     v-if="track.analysis?.danceability != null"
-                    class="rounded bg-muted px-2 py-1"
-                    >Dance {{ pct(track.analysis.danceability) }}</span
+                    variant="secondary"
+                    >Dance {{ pct(track.analysis.danceability) }}</Badge
                   >
-                  <span
+                  <Badge
                     v-if="track.analysis?.loudness != null"
-                    class="rounded bg-muted px-2 py-1"
-                    >Loudness {{ track.analysis.loudness.toFixed(1) }} dB</span
+                    variant="secondary"
+                    >Loudness {{ track.analysis.loudness.toFixed(1) }} dB</Badge
                   >
-                  <span
+                  <Badge
                     v-if="track.clap_similarity != null"
-                    class="rounded bg-muted px-2 py-1"
-                    >Sonic {{ pct(track.clap_similarity) }}</span
+                    variant="secondary"
+                    >Sonic {{ pct(track.clap_similarity) }}</Badge
                   >
-                  <span
-                    v-if="track.bpm_change != null"
-                    class="rounded bg-muted px-2 py-1"
-                    >Δ {{ signed(track.bpm_change) }} BPM</span
+                  <Badge v-if="track.bpm_change != null" variant="secondary"
+                    >Δ {{ signed(track.bpm_change) }} BPM</Badge
                   >
-                  <span
-                    v-if="track.key_affinity != null"
-                    class="rounded bg-muted px-2 py-1"
-                    >Key {{ pct(track.key_affinity) }}</span
+                  <Badge v-if="track.key_affinity != null" variant="secondary"
+                    >Key {{ pct(track.key_affinity) }}</Badge
                   >
-                  <span
-                    v-if="track.energy_delta != null"
-                    class="rounded bg-muted px-2 py-1"
-                    >Energy Δ {{ signed(track.energy_delta * 100) }}%</span
+                  <Badge v-if="track.energy_delta != null" variant="secondary"
+                    >Energy Δ {{ signed(track.energy_delta * 100) }}%</Badge
                   >
-                  <span
-                    v-if="track.score != null"
-                    class="rounded border border-primary/40 px-2 py-1 font-semibold"
-                    >{{ Math.round(track.score * 100) }} / 100 match</span
+                  <Badge v-if="track.score != null"
+                    >{{ Math.round(track.score * 100) }} / 100 match</Badge
                   >
-                  <span
-                    v-if="track.analysis?.source"
-                    class="rounded border px-2 py-1"
-                    >Source: {{ track.analysis.source }}</span
-                  >
+                  <Badge v-if="track.analysis?.source" variant="outline">
+                    Source: {{ track.analysis.source }}
+                  </Badge>
                 </div>
 
                 <div
@@ -574,7 +705,9 @@
             <div
               class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:w-[390px] lg:grid-cols-2"
             >
-              <label class="flex items-center gap-2 rounded-md border p-2">
+              <label
+                class="flex items-center gap-2 rounded-md border bg-background/70 p-2 backdrop-blur"
+              >
                 <input
                   v-model="track.required"
                   type="checkbox"
@@ -583,7 +716,9 @@
                 />
                 Required
               </label>
-              <label class="flex items-center gap-2 rounded-md border p-2">
+              <label
+                class="flex items-center gap-2 rounded-md border bg-background/70 p-2 backdrop-blur"
+              >
                 <input
                   v-model="track.fixed"
                   type="checkbox"
@@ -592,7 +727,9 @@
                 />
                 Fixed position
               </label>
-              <label class="flex items-center gap-2 rounded-md border p-2">
+              <label
+                class="flex items-center gap-2 rounded-md border bg-background/70 p-2 backdrop-blur"
+              >
                 <input
                   v-model="track.excluded"
                   type="checkbox"
@@ -601,7 +738,9 @@
                 />
                 Exclude
               </label>
-              <label class="flex flex-col gap-1 rounded-md border p-2">
+              <label
+                class="flex flex-col gap-1 rounded-md border bg-background/70 p-2 backdrop-blur"
+              >
                 <span>Transition into track</span>
                 <select
                   :value="track.transition_override ?? ''"
@@ -633,9 +772,78 @@
           Select a Music Assistant queue and run Analyze queue.
         </p>
       </div>
+
+      <!-- gap slot: re-anchor the mix with a library search -->
+      <div v-if="gapSlotOpen" class="mt-4 rounded-lg border border-dashed p-4">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <div>
+            <h3 class="font-medium">Search your library</h3>
+            <p class="text-xs text-muted-foreground">
+              Pick a track to play now — the mix re-anchors around it.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" @click="gapSlotOpen = false">
+            Close
+          </Button>
+        </div>
+        <input
+          v-model="gapSearch"
+          type="text"
+          placeholder="Search tracks in your library…"
+          class="w-full rounded-md border bg-background px-3 py-2 text-sm"
+          @input="searchGapTracks"
+        />
+        <div class="mt-3 max-h-72 space-y-2 overflow-y-auto">
+          <div
+            v-for="result in gapResults"
+            :key="result.uri ?? result.item_id"
+            class="flex items-center gap-3 rounded-md border p-2"
+          >
+            <img
+              v-if="result.image_url"
+              :src="result.image_url"
+              :alt="''"
+              aria-hidden="true"
+              class="h-10 w-10 rounded object-cover"
+            />
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-medium">
+                {{ result.name }}
+              </p>
+              <p class="truncate text-xs text-muted-foreground">
+                {{ result.artists?.map((a) => a.name).join(", ") || "" }}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              :disabled="!currentQueueId()"
+              @click="playGapTrack(result)"
+            >
+              <Play class="mr-1 h-3.5 w-3.5" />
+              Play now
+            </Button>
+          </div>
+          <p
+            v-if="gapSearch && !gapSearching && !gapResults.length"
+            class="text-sm text-muted-foreground"
+          >
+            No library tracks match "{{ gapSearch }}".
+          </p>
+        </div>
+      </div>
+      <button
+        v-else
+        type="button"
+        class="mt-4 rounded-md border border-dashed px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent"
+        @click="gapSlotOpen = true"
+      >
+        <Search class="mr-1 inline h-3.5 w-3.5" /> Nothing fits? Search your
+        library to fill the gap
+      </button>
     </section>
 
-    <!-- Phase 4: advanced tuning and actual API diagnostics. -->
+    <!-- Collapsible: advanced tuning and diagnostics -->
     <details class="rounded-xl border bg-card shadow-sm">
       <summary
         class="flex cursor-pointer list-none items-center justify-between gap-3 p-4 md:p-5"
@@ -929,7 +1137,11 @@
 </template>
 
 <script setup lang="ts">
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Spinner } from "@/components/ui/spinner";
+import { getMediaItemImageUrl } from "@/helpers/utils";
 import { resolvePlayerQueue } from "@/plugins/api/helpers";
 import { api } from "@/plugins/api";
 import { store } from "@/plugins/store";
@@ -938,15 +1150,26 @@ import {
   Check,
   ChevronDown,
   CircleAlert,
+  DatabaseZap,
+  LibraryBig,
+  ListPlus,
   Music2,
+  PauseCircle,
+  Play,
   RefreshCw,
   RotateCcw,
   Save,
+  Search,
   Settings2,
   SlidersHorizontal,
   Sparkles,
+  Square,
   WandSparkles,
 } from "@lucide/vue";
+import type {
+  MediaItemImage,
+  Track,
+} from "@music-assistant/frontend-plugins/types";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { toast } from "vue-sonner";
 
@@ -974,12 +1197,18 @@ interface Analysis {
   instrumental?: boolean | null;
   explicit?: boolean | null;
 }
+interface TrackImage {
+  path: string;
+  proxy_id: string | null;
+  remotely_accessible: boolean | null;
+}
 interface SmartTrack {
   queue_item_id: string;
   name: string;
   artist: string;
   provider: string;
   item_id: string;
+  image: TrackImage | null;
   analysis: Analysis | null;
   score: number | null;
   reasons: string[];
@@ -1024,6 +1253,20 @@ interface ApiResponse {
   analysis_failed?: number;
   analysis_rate_limited?: number;
   degraded?: boolean;
+  added?: unknown[];
+  seed?: { name?: string } | null;
+}
+interface LibraryScanState {
+  running: boolean;
+  total: number;
+  analyzed: number;
+  skipped: number;
+  failed: number;
+  errors: string[];
+  deferring: boolean;
+  cancelled: boolean;
+  started_at: number | null;
+  finished_at: number | null;
 }
 interface SignalControl {
   state: SignalState;
@@ -1071,8 +1314,22 @@ const transitionOverrides = ref<Record<string, number>>({});
 const trackFlags = ref<
   Record<string, { required: boolean; fixed: boolean; excluded: boolean }>
 >({});
+// library analysis sweep + analyzed playlist builder
+const sweep = ref<LibraryScanState | null>(null);
+const analyzedPlaylistName = ref("Smart DJ - analyzed");
+const analyzedPlaylistSearch = ref("");
+const creatingPlaylist = ref(false);
+// complete-mix "added" chips (matched by name, the response's shape)
+const justAdded = ref<Set<string>>(new Set());
+// gap slot: library search to re-anchor the mix
+const gapSlotOpen = ref(false);
+const gapSearch = ref("");
+const gapSearching = ref(false);
+const gapResults = ref<Track[]>([]);
 let refreshGeneration = 0;
 let plannedControls: RawObject | null = null;
+let sweepPollTimer: ReturnType<typeof setInterval> | null = null;
+let gapSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
 const signalNames: SignalName[] = [
   "bpm",
@@ -1133,6 +1390,11 @@ const energyPoints = computed(() =>
         typeof point.energy === "number" && Number.isFinite(point.energy),
     ),
 );
+const sweepProgressPct = computed(() => {
+  const s = sweep.value;
+  if (!s || !s.total) return 0;
+  return Math.round(((s.analyzed + s.skipped + s.failed) / s.total) * 100);
+});
 
 function bpmLabel(value: number | null | undefined): string {
   return value == null ? "—" : String(Math.round(value));
@@ -1149,6 +1411,11 @@ function signed(value: number): string {
 function signalLabel(name: SignalName): string {
   return name.replaceAll("_", " ");
 }
+function artworkUrl(track: SmartTrack): string {
+  return track.image
+    ? getMediaItemImageUrl(track.image as MediaItemImage, 256)
+    : "";
+}
 function normalizeAnalysis(value: unknown): Analysis | null {
   if (!value || typeof value !== "object") return null;
   const a = value as RawObject;
@@ -1163,6 +1430,19 @@ function normalizeAnalysis(value: unknown): Analysis | null {
     source: typeof a.source === "string" ? a.source : undefined,
     instrumental: typeof a.instrumental === "boolean" ? a.instrumental : null,
     explicit: typeof a.explicit === "boolean" ? a.explicit : null,
+  };
+}
+function normalizeImage(value: unknown): TrackImage | null {
+  if (!value || typeof value !== "object") return null;
+  const img = value as RawObject;
+  if (typeof img.path !== "string" || !img.path) return null;
+  return {
+    path: img.path,
+    proxy_id: typeof img.proxy_id === "string" ? img.proxy_id : null,
+    remotely_accessible:
+      typeof img.remotely_accessible === "boolean"
+        ? img.remotely_accessible
+        : null,
   };
 }
 function decorate(
@@ -1194,6 +1474,7 @@ function decorate(
     artist: String(a.artist ?? ""),
     provider: String(a.provider ?? ""),
     item_id: String(a.item_id ?? ""),
+    image: normalizeImage(a.image),
     analysis,
     score: typeof a.score === "number" ? a.score : null,
     reasons: Array.isArray(a.reasons)
@@ -1347,7 +1628,7 @@ function restorePreferences(): void {
       lookahead.value = Math.round(clamp(saved.lookahead, 1, 96));
     if (
       typeof saved.transitionStyle === "string" &&
-      ["auto", "full_blend", "energy", "quick_cut"].includes(
+      ["auto", "full_blend", "energy", "quick_cut", "radio"].includes(
         saved.transitionStyle,
       )
     )
@@ -1423,15 +1704,26 @@ async function completeMix(): Promise<void> {
   completingMix.value = true;
   errorMessage.value = "";
   try {
-    await api.sendCommand<ApiResponse>("smart_dj/complete_mix", {
+    const result = await api.sendCommand<ApiResponse>("smart_dj/complete_mix", {
       queue_id: queueId,
       count: 5,
     });
+    const addedNames = (
+      Array.isArray(result?.added) ? result.added : []
+    ).filter((name): name is string => typeof name === "string");
     await refresh();
-    toast.success("Complete mix: 5 compatible tracks appended from Musicae.");
+    if (addedNames.length) {
+      justAdded.value = new Set(addedNames);
+      toast.success(
+        `Smart DJ added ${addedNames.length} track(s): ${addedNames.join(", ")}`,
+      );
+    } else {
+      toast.success("Complete mix finished (no new tracks were added).");
+    }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error);
     toast.error(`Complete mix failed: ${errorMessage.value}`);
+    gapSlotOpen.value = true;
   } finally {
     completingMix.value = false;
   }
@@ -1495,6 +1787,7 @@ function resetPreferences(): void {
   endTrackId.value = "";
   transitionOverrides.value = {};
   trackFlags.value = {};
+  justAdded.value = new Set();
   for (const track of tracks.value) {
     track.required = false;
     track.fixed = false;
@@ -1520,6 +1813,103 @@ async function loadDiagnostics(): Promise<void> {
     errorMessage.value = `Could not load Smart DJ diagnostics: ${error instanceof Error ? error.message : String(error)}`;
   } finally {
     diagnosticsLoading.value = false;
+  }
+}
+async function startLibraryScan(): Promise<void> {
+  errorMessage.value = "";
+  try {
+    sweep.value = await api.sendCommand<LibraryScanState>(
+      "smart_dj/analyze_library_local",
+      { command: "start", pause_while_playing: true },
+    );
+    if (sweep.value.running) startSweepPolling();
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error);
+  }
+}
+async function cancelLibraryScan(): Promise<void> {
+  try {
+    sweep.value = await api.sendCommand<LibraryScanState>(
+      "smart_dj/analyze_library_local",
+      { command: "cancel" },
+    );
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error);
+  }
+}
+async function pollSweep(): Promise<void> {
+  try {
+    const state = await api.sendCommand<LibraryScanState>(
+      "smart_dj/analyze_library_local",
+      { command: "status" },
+    );
+    sweep.value = state;
+    if (!state.running) stopSweepPolling();
+  } catch {
+    // transient backend hiccup: keep the last known state and retry
+  }
+}
+function startSweepPolling(): void {
+  if (sweepPollTimer) return;
+  sweepPollTimer = setInterval(() => void pollSweep(), 5000);
+}
+function stopSweepPolling(): void {
+  if (sweepPollTimer) {
+    clearInterval(sweepPollTimer);
+    sweepPollTimer = null;
+  }
+}
+async function createAnalyzedPlaylist(): Promise<void> {
+  creatingPlaylist.value = true;
+  errorMessage.value = "";
+  try {
+    const result = await api.sendCommand<{
+      playlist_id: string;
+      tracks: number;
+    }>("smart_dj/create_analyzed_playlist", {
+      name: analyzedPlaylistName.value || "Smart DJ - analyzed",
+      search: analyzedPlaylistSearch.value.trim(),
+    });
+    toast.success(`Playlist created with ${result.tracks} analyzed track(s).`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    errorMessage.value = message;
+    toast.error(`Could not create the playlist: ${message}`);
+  } finally {
+    creatingPlaylist.value = false;
+  }
+}
+function searchGapTracks(): void {
+  if (gapSearchTimer) clearTimeout(gapSearchTimer);
+  const term = gapSearch.value.trim();
+  if (!term) {
+    gapResults.value = [];
+    return;
+  }
+  gapSearchTimer = setTimeout(async () => {
+    gapSearching.value = true;
+    try {
+      gapResults.value = await api.getLibraryTracks(false, term, 25, 0);
+    } catch {
+      gapResults.value = [];
+    } finally {
+      gapSearching.value = false;
+    }
+  }, 300);
+}
+async function playGapTrack(track: Track): Promise<void> {
+  const queueId = currentQueueId();
+  if (!queueId || !track.uri) return;
+  try {
+    await api.playMedia(track.uri, "play", { queue_id: queueId });
+    justAdded.value = new Set();
+    gapSlotOpen.value = false;
+    toast.success(`Playing ${track.name} — the mix re-anchors around it.`);
+    await refresh();
+  } catch (error) {
+    toast.error(
+      `Could not play ${track.name}: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 async function refresh(): Promise<void> {
@@ -1700,10 +2090,16 @@ watch(
 onMounted(() => {
   restorePreferences();
   void refresh();
+  // pick up an in-flight sweep from another session after a reload
+  void pollSweep().then(() => {
+    if (sweep.value?.running) startSweepPolling();
+  });
 });
 onUnmounted(() => {
   refreshGeneration++;
   pendingPlan.value = false;
   plannedControls = null;
+  stopSweepPolling();
+  if (gapSearchTimer) clearTimeout(gapSearchTimer);
 });
 </script>
