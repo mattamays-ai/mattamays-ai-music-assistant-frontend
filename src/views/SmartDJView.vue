@@ -800,8 +800,8 @@
             class="flex items-center gap-3 rounded-md border p-2"
           >
             <img
-              v-if="result.image_url"
-              :src="result.image_url"
+              v-if="gapResultImage(result)"
+              :src="gapResultImage(result)"
               :alt="''"
               aria-hidden="true"
               class="h-10 w-10 rounded object-cover"
@@ -1420,6 +1420,12 @@ function artworkUrl(track: SmartTrack): string {
   return track.image
     ? getMediaItemImageUrl(track.image as MediaItemImage, 256)
     : "";
+}
+function gapResultImage(track: Track): string {
+  const raw = track.image as
+    MediaItemImage[] | MediaItemImage | null | undefined;
+  const img = Array.isArray(raw) ? raw[0] : raw;
+  return img ? getMediaItemImageUrl(img, 96) : "";
 }
 function normalizeAnalysis(value: unknown): Analysis | null {
   if (!value || typeof value !== "object") return null;
