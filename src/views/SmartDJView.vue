@@ -1145,7 +1145,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
-import { getMediaItemImageUrl } from "@/helpers/utils";
+import { getMediaItemImage, getMediaItemImageUrl } from "@/helpers/utils";
 import { resolvePlayerQueue } from "@/plugins/api/helpers";
 import { api } from "@/plugins/api";
 import { store } from "@/plugins/store";
@@ -1172,6 +1172,7 @@ import {
 } from "@lucide/vue";
 import {
   QueueOption,
+  ImageType,
   type MediaItemImage,
   type Track,
 } from "@/plugins/api/interfaces";
@@ -1422,9 +1423,7 @@ function artworkUrl(track: SmartTrack): string {
     : "";
 }
 function gapResultImage(track: Track): string {
-  const raw = track.image as
-    MediaItemImage[] | MediaItemImage | null | undefined;
-  const img = Array.isArray(raw) ? raw[0] : raw;
+  const img = getMediaItemImage(track, ImageType.THUMB);
   return img ? getMediaItemImageUrl(img, 96) : "";
 }
 function normalizeAnalysis(value: unknown): Analysis | null {
