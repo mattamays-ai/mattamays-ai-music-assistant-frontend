@@ -67,6 +67,75 @@
       >
     </div>
 
+    <!-- Hard-requirements insight: why the strongest pairing was rejected -->
+    <div
+      v-if="hardViolations.length"
+      class="rounded-xl border border-destructive/50 bg-card p-4 text-sm shadow-sm md:p-5"
+      role="alert"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <CircleAlert class="h-4 w-4 shrink-0" />
+          <h2 class="font-medium">Hard requirements blocked the plan</h2>
+        </div>
+        <Badge
+          v-if="planCandidatesRejected > 0"
+          variant="outline"
+          class="rounded-full"
+        >
+          {{ planCandidatesRejected }} candidate pairing(s) rejected
+        </Badge>
+      </div>
+      <p class="mt-1 text-xs text-muted-foreground">
+        These rules could not be satisfied with the current queue. Apply a
+        suggested change, adjust the controls, then rebuild the plan.
+      </p>
+      <ul class="mt-3 space-y-2">
+        <li
+          v-for="(violation, violationIndex) in hardViolations"
+          :key="`${violation.rule}-${violationIndex}`"
+          class="rounded-lg border p-3"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <ExpandableTerm
+              :term-key="violation.rule"
+              :fallback="hardRuleLabel(violation.rule)"
+              class="font-medium"
+            />
+            <Badge
+              v-if="violation.severity"
+              variant="secondary"
+              class="rounded-full"
+            >
+              {{ violation.severity }}
+            </Badge>
+          </div>
+          <p
+            v-if="violation.actual != null && violation.limit != null"
+            class="mt-1 text-xs text-muted-foreground"
+          >
+            actual {{ violation.actual }}{{ violation.unit ?? "" }} · limit
+            {{ violation.limit }}{{ violation.unit ?? "" }}
+          </p>
+          <p
+            v-else-if="violation.message"
+            class="mt-1 text-xs text-muted-foreground"
+          >
+            {{ violation.message }}
+          </p>
+          <Button
+            v-if="violation.suggestion?.setting"
+            size="sm"
+            variant="outline"
+            class="mt-2"
+            @click="applyHardFix(violation)"
+          >
+            {{ hardFixLabel(violation) }}
+          </Button>
+        </li>
+      </ul>
+    </div>
+
     <div class="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
       <!-- Live queue workstation -->
       <section class="rounded-xl border bg-card p-4 shadow-sm md:p-5">
@@ -221,6 +290,29 @@
                 "
               />
             </label>
+            <label class="mt-2 flex items-center justify-between gap-3">
+              <span class="text-xs text-muted-foreground"
+                >Stems — separate vocals/instrumentals in transitions</span
+              >
+              <input
+                v-model="stemsEnabled"
+                type="checkbox"
+                class="h-4 w-4"
+                :disabled="!stemsAvailable"
+                :title="
+                  stemsAvailable
+                    ? 'Use separated stems during AutoMix transitions'
+                    : 'Stem separation is not available on this server'
+                "
+              />
+            </label>
+            <p
+              v-if="!stemsAvailable"
+              class="mt-1 text-xs text-muted-foreground"
+            >
+              Stem separation is unavailable on this server; transitions fall
+              back to plain blends.
+            </p>
             <p
               v-if="!autoMixAvailable"
               class="mt-2 text-xs text-muted-foreground"
@@ -506,6 +598,368 @@
               <ListPlus class="mr-2 h-4 w-4" />
               {{ creatingPlaylist ? "Creating…" : "Create playlist" }}
             </Button>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <!-- Collapsible: library browser -->
+    <details class="rounded-xl border bg-card shadow-sm">
+      <summary
+        class="flex cursor-pointer list-none items-center justify-between gap-3 p-4 md:p-5"
+      >
+        <div class="flex items-center gap-2">
+          <LibraryBig class="h-5 w-5" />
+          <div>
+            <h2 class="text-lg font-semibold">Library browser</h2>
+            <p class="text-sm text-muted-foreground">
+              Browse playlists, artists and tracks — analyze a playlist, sort it
+              into Smart DJ order, or pick songs and mix them
+            </p>
+          </div>
+        </div>
+        <ChevronDown class="h-4 w-4 shrink-0" />
+      </summary>
+      <div class="space-y-4 border-t p-4 md:p-5">
+        <div
+          class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div class="flex gap-1 rounded-lg border p-1">
+            <button
+              v-for="tab in browserTabs"
+              :key="tab.id"
+              type="button"
+              class="rounded-md px-3 py-1.5 text-sm font-medium"
+              :class="
+                browserTab === tab.id
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-accent'
+              "
+              @click="browserTab = tab.id"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+          <input
+            v-model="browserSearch"
+            type="text"
+            :placeholder="browserSearchPlaceholder"
+            class="w-full rounded-md border bg-background px-3 py-2 text-sm sm:max-w-xs"
+          />
+        </div>
+        <p v-if="browserError" class="text-sm text-destructive">
+          {{ browserError }}
+        </p>
+
+        <!-- Playlists tab -->
+        <div v-if="browserTab === 'playlists'" class="space-y-2">
+          <p v-if="browserLoading" class="text-sm text-muted-foreground">
+            Loading playlists…
+          </p>
+          <article
+            v-for="playlist in browserPlaylists"
+            :key="`${playlist.provider}/${playlist.item_id}`"
+            class="rounded-lg border p-3"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                class="min-w-0 flex-1 text-left"
+                @click="openPlaylistRow(playlist)"
+              >
+                <span class="block truncate font-medium">{{
+                  playlist.name
+                }}</span>
+                <span class="block truncate text-xs text-muted-foreground">
+                  {{ playlist.owner }}
+                  ·
+                  {{
+                    openPlaylistId === playlist.item_id
+                      ? "hide tracks"
+                      : "view tracks"
+                  }}
+                </span>
+              </button>
+              <div class="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  :disabled="
+                    analyzingPlaylistIds.has(
+                      `${playlist.provider}/${playlist.item_id}`,
+                    )
+                  "
+                  @click="analyzePlaylistRow(playlist)"
+                >
+                  {{
+                    analyzingPlaylistIds.has(
+                      `${playlist.provider}/${playlist.item_id}`,
+                    )
+                      ? "Analyzing…"
+                      : "Analyze"
+                  }}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  :disabled="
+                    savingSortedId ===
+                    `${playlist.provider}/${playlist.item_id}`
+                  "
+                  :title="
+                    playlist.is_editable
+                      ? 'Sort this playlist into Smart DJ order and save it'
+                      : 'Read-only playlists cannot be re-sorted'
+                  "
+                  @click="sortSavePlaylistRow(playlist)"
+                >
+                  Sort &amp; save
+                </Button>
+              </div>
+            </div>
+            <p
+              v-if="analyzeResults[`${playlist.provider}/${playlist.item_id}`]"
+              class="mt-2 text-xs text-muted-foreground"
+            >
+              {{ analyzeResults[`${playlist.provider}/${playlist.item_id}`] }}
+            </p>
+            <div
+              v-if="openPlaylistId === playlist.item_id"
+              class="mt-3 space-y-1 border-t pt-2"
+            >
+              <p
+                v-if="browserDetailLoading"
+                class="text-xs text-muted-foreground"
+              >
+                Loading tracks…
+              </p>
+              <label
+                v-for="detailTrack in browserDetailTracks"
+                :key="trackUri(detailTrack)"
+                class="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-accent"
+              >
+                <input
+                  type="checkbox"
+                  class="h-4 w-4"
+                  :checked="isTrackSelected(detailTrack)"
+                  @change="toggleTrackSelection(detailTrack)"
+                />
+                <span class="min-w-0 flex-1 truncate">{{
+                  detailTrack.name
+                }}</span>
+                <span class="shrink-0 text-xs text-muted-foreground">
+                  {{ trackArtistNames(detailTrack) }}
+                </span>
+              </label>
+              <p
+                v-if="!browserDetailLoading && !browserDetailTracks.length"
+                class="text-xs text-muted-foreground"
+              >
+                No tracks returned for this playlist.
+              </p>
+            </div>
+          </article>
+          <p
+            v-if="!browserLoading && !browserPlaylists.length"
+            class="text-sm text-muted-foreground"
+          >
+            No playlists match "{{ browserSearch }}".
+          </p>
+        </div>
+
+        <!-- Artists tab -->
+        <div v-else-if="browserTab === 'artists'" class="space-y-2">
+          <p v-if="browserLoading" class="text-sm text-muted-foreground">
+            Loading artists…
+          </p>
+          <article
+            v-for="artist in browserArtists"
+            :key="`${artist.provider}/${artist.item_id}`"
+            class="rounded-lg border p-3"
+          >
+            <button
+              type="button"
+              class="w-full text-left"
+              @click="openArtistRow(artist)"
+            >
+              <span class="block truncate font-medium">{{ artist.name }}</span>
+              <span class="block truncate text-xs text-muted-foreground">
+                {{
+                  openArtistId === artist.item_id
+                    ? "hide tracks"
+                    : "view tracks"
+                }}
+              </span>
+            </button>
+            <div
+              v-if="openArtistId === artist.item_id"
+              class="mt-3 space-y-1 border-t pt-2"
+            >
+              <p
+                v-if="browserDetailLoading"
+                class="text-xs text-muted-foreground"
+              >
+                Loading tracks…
+              </p>
+              <label
+                v-for="detailTrack in browserDetailTracks"
+                :key="trackUri(detailTrack)"
+                class="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-accent"
+              >
+                <input
+                  type="checkbox"
+                  class="h-4 w-4"
+                  :checked="isTrackSelected(detailTrack)"
+                  @change="toggleTrackSelection(detailTrack)"
+                />
+                <span class="min-w-0 flex-1 truncate">{{
+                  detailTrack.name
+                }}</span>
+                <span class="shrink-0 text-xs text-muted-foreground">
+                  {{ trackArtistNames(detailTrack) }}
+                </span>
+              </label>
+              <p
+                v-if="!browserDetailLoading && !browserDetailTracks.length"
+                class="text-xs text-muted-foreground"
+              >
+                No tracks returned for this artist.
+              </p>
+            </div>
+          </article>
+          <p
+            v-if="!browserLoading && !browserArtists.length"
+            class="text-sm text-muted-foreground"
+          >
+            No artists match "{{ browserSearch }}".
+          </p>
+        </div>
+
+        <!-- Tracks tab -->
+        <div v-else class="space-y-2">
+          <p v-if="browserLoading" class="text-sm text-muted-foreground">
+            Loading tracks…
+          </p>
+          <label
+            v-for="libTrack in browserTracks"
+            :key="trackUri(libTrack)"
+            class="flex items-center gap-2 rounded-lg border p-2 text-sm hover:bg-accent"
+          >
+            <input
+              type="checkbox"
+              class="h-4 w-4"
+              :checked="isTrackSelected(libTrack)"
+              @change="toggleTrackSelection(libTrack)"
+            />
+            <img
+              v-if="gapResultImage(libTrack)"
+              :src="gapResultImage(libTrack)"
+              :alt="''"
+              aria-hidden="true"
+              class="h-9 w-9 rounded object-cover"
+            />
+            <span class="min-w-0 flex-1 truncate">{{ libTrack.name }}</span>
+            <span class="shrink-0 text-xs text-muted-foreground">
+              {{ trackArtistNames(libTrack) }}
+            </span>
+          </label>
+          <p
+            v-if="!browserLoading && !browserTracks.length"
+            class="text-sm text-muted-foreground"
+          >
+            No tracks match "{{ browserSearch }}".
+          </p>
+        </div>
+
+        <!-- selection tray -->
+        <div
+          v-if="selectedCount"
+          class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/5 p-3"
+        >
+          <div class="min-w-0">
+            <p class="text-sm font-medium">
+              {{ selectedCount }} track(s) selected
+            </p>
+            <p class="truncate text-xs text-muted-foreground">
+              {{ selectedNames }}
+            </p>
+            <p v-if="!currentQueueId()" class="text-xs text-muted-foreground">
+              Select a Music Assistant queue above to mix into.
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" @click="clearSelection">
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              :disabled="mixingSelection || !currentQueueId()"
+              @click="mixSelection()"
+            >
+              {{ mixingSelection ? "Mixing…" : "Mix this" }}
+            </Button>
+          </div>
+        </div>
+
+        <!-- saved sorted-playlist result -->
+        <div v-if="sortedSave" class="rounded-lg border p-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-sm font-medium">
+              Smart DJ order saved — {{ sortedSave.title }}
+            </h3>
+            <Button size="sm" variant="outline" @click="sortedSave = null">
+              Dismiss
+            </Button>
+          </div>
+          <p class="mt-1 text-xs text-muted-foreground">
+            {{ sortedSave.track_count }} track(s) written back in Smart DJ
+            order.
+          </p>
+          <ol
+            class="mt-2 list-decimal space-y-0.5 pl-5 text-xs text-muted-foreground"
+          >
+            <li
+              v-for="(orderedName, orderIndex) in sortedSave.order"
+              :key="`${orderedName}-${orderIndex}`"
+            >
+              {{ orderedName }}
+            </li>
+          </ol>
+          <div
+            v-if="sortedSave.transition_notes.length"
+            class="mt-2 space-y-0.5"
+          >
+            <div class="text-xs font-medium">Transition report</div>
+            <ul class="space-y-0.5">
+              <li
+                v-for="(note, noteIndex) in sortedSave.transition_notes"
+                :key="noteIndex"
+                class="text-xs text-muted-foreground"
+              >
+                <div>
+                  → {{ note.to ?? "next track" }}
+                  <span v-if="note.bpm_delta_pct != null">
+                    · {{ note.bpm_delta_pct.toFixed(1) }}% BPM
+                  </span>
+                  <span v-if="note.key_distance != null">
+                    · key {{ note.key_distance.toFixed(2) }}
+                  </span>
+                  <span v-if="note.source"> · {{ note.source }}</span>
+                </div>
+                <div v-if="note.style" class="mt-0.5">
+                  <ExpandableTerm
+                    :term-key="`style:${note.style}`"
+                    :fallback="note.style.replaceAll('_', ' ')"
+                  />
+                </div>
+                <div v-if="note.both_vocal" class="mt-0.5">
+                  <ExpandableTerm
+                    term-key="meta:vocal_density"
+                    fallback="both vocal"
+                  />
+                </div>
+              </li>
+            </ul>
           </div>
         </div>
       </div>
@@ -1151,16 +1605,28 @@
           :key="index"
           class="text-xs text-muted-foreground"
         >
-          → {{ note.to ?? "next track" }}
-          <span v-if="note.style"> · {{ note.style }}</span>
-          <span v-if="note.bpm_delta_pct != null">
-            · {{ note.bpm_delta_pct.toFixed(1) }}% BPM
-          </span>
-          <span v-if="note.key_distance != null">
-            · key {{ note.key_distance.toFixed(2) }}
-          </span>
-          <span v-if="note.both_vocal"> · both vocal</span>
-          <span v-if="note.source"> · {{ note.source }}</span>
+          <div>
+            → {{ note.to ?? "next track" }}
+            <span v-if="note.bpm_delta_pct != null">
+              · {{ note.bpm_delta_pct.toFixed(1) }}% BPM
+            </span>
+            <span v-if="note.key_distance != null">
+              · key {{ note.key_distance.toFixed(2) }}
+            </span>
+            <span v-if="note.source"> · {{ note.source }}</span>
+          </div>
+          <div v-if="note.style" class="mt-0.5">
+            <ExpandableTerm
+              :term-key="`style:${note.style}`"
+              :fallback="note.style.replaceAll('_', ' ')"
+            />
+          </div>
+          <div v-if="note.both_vocal" class="mt-0.5">
+            <ExpandableTerm
+              term-key="meta:vocal_density"
+              fallback="both vocal"
+            />
+          </div>
         </li>
       </ul>
     </div>
@@ -1170,6 +1636,7 @@
 <script setup lang="ts">
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import ExpandableTerm from "@/components/smartdj/ExpandableTerm.vue";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { getMediaItemImage, getMediaItemImageUrl } from "@/helpers/utils";
@@ -1200,7 +1667,10 @@ import {
 import {
   QueueOption,
   ImageType,
+  MediaType,
+  type Artist,
   type MediaItemImage,
+  type Playlist,
   type Track,
 } from "@/plugins/api/interfaces";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
@@ -1264,6 +1734,25 @@ interface Capabilities {
     bass_eq_management: boolean;
     tempo_planning: boolean;
   };
+  // Reported by smart_dj/capabilities on newer servers; absent reads as
+  // "unknown", which we treat as available rather than disabling the toggle.
+  stems?: boolean;
+}
+interface HardViolationSuggestion {
+  setting: string | null;
+  label?: string | null;
+  from?: unknown;
+  to?: unknown;
+}
+interface HardViolation {
+  rule: string;
+  message?: string | null;
+  actual?: number | string | null;
+  limit?: number | string | null;
+  unit?: string | null;
+  overshoot?: number | null;
+  severity?: string | null;
+  suggestion?: HardViolationSuggestion | null;
 }
 interface ProviderStatus {
   configured: boolean;
@@ -1290,6 +1779,19 @@ interface ApiResponse {
   saved?: boolean;
   added?: unknown[];
   seed?: { name?: string } | null;
+  // smart_dj/mix_tracks response (same contract as mix_playlist)
+  count?: number;
+  resumed?: boolean;
+  // fail-soft plan-phase hard-requirements report (server lane A); absent on
+  // older servers, which just means "no structured violation data"
+  plan_failed?: boolean;
+  hard_violations?: HardViolation[];
+  candidates_rejected?: number;
+  // smart_dj/save_sorted_playlist response
+  playlist_id?: string;
+  track_count?: number;
+  order?: unknown[];
+  levels?: unknown[];
 }
 interface TransitionNote {
   to: string | null;
@@ -1371,10 +1873,49 @@ const gapSlotOpen = ref(false);
 const gapSearch = ref("");
 const gapSearching = ref(false);
 const gapResults = ref<Track[]>([]);
+// library browser: Playlists / Artists / Tracks with in-list search
+const browserTab = ref<BrowserTab>("playlists");
+const browserSearch = ref("");
+const browserLoading = ref(false);
+const browserError = ref("");
+const browserPlaylists = ref<Playlist[]>([]);
+const browserArtists = ref<Artist[]>([]);
+const browserTracks = ref<Track[]>([]);
+const browserDetailLoading = ref(false);
+const openPlaylistId = ref<string | null>(null);
+const openArtistId = ref<string | null>(null);
+const browserDetailTracks = ref<Track[]>([]);
+const analyzingPlaylistIds = ref<Set<string>>(new Set());
+const analyzeResults = ref<Record<string, string>>({});
+const savingSortedId = ref<string | null>(null);
+const sortedSave = ref<{
+  title: string;
+  track_count: number;
+  order: string[];
+  transition_notes: TransitionNote[];
+} | null>(null);
+// selection tray across tracks/artist-detail/playlist-detail rows
+const selection = ref<
+  Record<string, { name: string; artist: string; uri: string }>
+>({});
+const mixingSelection = ref(false);
+// hard-requirements insight panel (plan-phase, fail-soft)
+const hardViolations = ref<HardViolation[]>([]);
+const planCandidatesRejected = ref(0);
+// stems toggle: rides buildControls() as controls.stems_enabled
+const stemsEnabled = ref(false);
 let refreshGeneration = 0;
 let plannedControls: RawObject | null = null;
 let sweepPollTimer: ReturnType<typeof setInterval> | null = null;
 let gapSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let browserSearchTimer: ReturnType<typeof setTimeout> | null = null;
+
+type BrowserTab = "playlists" | "artists" | "tracks";
+const browserTabs: Array<{ id: BrowserTab; label: string }> = [
+  { id: "playlists", label: "Playlists" },
+  { id: "artists", label: "Artists" },
+  { id: "tracks", label: "Tracks" },
+];
 
 const signalNames: SignalName[] = [
   "bpm",
@@ -1439,6 +1980,22 @@ const sweepProgressPct = computed(() => {
   const s = sweep.value;
   if (!s || !s.total) return 0;
   return Math.round(((s.analyzed + s.skipped + s.failed) / s.total) * 100);
+});
+// Absent capability key reads as "assume available" so an older server never
+// hard-disables a toggle that would still degrade gracefully server-side.
+const stemsAvailable = computed(() => capabilities.value?.stems !== false);
+const selectedCount = computed(() => Object.keys(selection.value).length);
+const selectedUris = computed(() => Object.keys(selection.value));
+const selectedNames = computed(() => {
+  const names = Object.values(selection.value)
+    .map((entry) => entry.name)
+    .filter(Boolean);
+  return names.slice(0, 5).join(", ") + (names.length > 5 ? ", …" : "");
+});
+const browserSearchPlaceholder = computed(() => {
+  if (browserTab.value === "playlists") return "Search playlists…";
+  if (browserTab.value === "artists") return "Search artists…";
+  return "Search tracks…";
 });
 
 function bpmLabel(value: number | null | undefined): string {
@@ -1574,6 +2131,9 @@ function buildControls(apply = false): RawObject {
     beat_strictness: beatStrictness.value,
     transition_aggressiveness: transitionAggressiveness.value,
     preserve_variety: preserveVariety.value,
+    // Parsed into DJControls.stems_enabled; degrades to plain blend server-side
+    // when the separation runtime is missing.
+    stems_enabled: stemsEnabled.value,
     end_track_id: endTrackId.value || null,
     apply,
     required_ids: tracks.value
@@ -1611,6 +2171,7 @@ function savePreferences(): void {
         automix: automix.value,
         smartReorder: smartReorder.value,
         preserveVariety: preserveVariety.value,
+        stemsEnabled: stemsEnabled.value,
         endTrackId: endTrackId.value,
         transitionOverrides: transitionOverrides.value,
         trackFlags: Object.fromEntries(
@@ -1706,6 +2267,8 @@ function restorePreferences(): void {
       smartReorder.value = saved.smartReorder;
     if (typeof saved.preserveVariety === "boolean")
       preserveVariety.value = saved.preserveVariety;
+    if (typeof saved.stemsEnabled === "boolean")
+      stemsEnabled.value = saved.stemsEnabled;
     if (typeof saved.endTrackId === "string")
       endTrackId.value = saved.endTrackId;
     if (
@@ -1839,10 +2402,15 @@ function resetPreferences(): void {
   automix.value = false;
   smartReorder.value = true;
   preserveVariety.value = true;
+  stemsEnabled.value = false;
   endTrackId.value = "";
   transitionOverrides.value = {};
   trackFlags.value = {};
   justAdded.value = new Set();
+  hardViolations.value = [];
+  planCandidatesRejected.value = 0;
+  sortedSave.value = null;
+  selection.value = {};
   for (const track of tracks.value) {
     track.required = false;
     track.fixed = false;
@@ -1967,6 +2535,281 @@ async function playGapTrack(track: Track): Promise<void> {
     );
   }
 }
+function trackUri(track: Track): string {
+  return track.uri || `library://track/${track.item_id}`;
+}
+function trackArtistNames(track: Track): string {
+  return (track.artists ?? [])
+    .map((artist) => artist.name)
+    .filter(Boolean)
+    .join(", ");
+}
+
+// --- library browser -------------------------------------------------------
+async function loadBrowser(): Promise<void> {
+  browserLoading.value = true;
+  browserError.value = "";
+  const search = browserSearch.value.trim();
+  try {
+    if (browserTab.value === "playlists") {
+      browserPlaylists.value = await api.getLibraryPlaylists(
+        false,
+        search || undefined,
+        200,
+        0,
+        "sort_name",
+      );
+    } else if (browserTab.value === "artists") {
+      browserArtists.value = await api.getLibraryArtists(
+        false,
+        search || undefined,
+        200,
+        0,
+        "sort_name",
+      );
+    } else {
+      browserTracks.value = await api.getLibraryTracks(
+        false,
+        search || undefined,
+        200,
+        0,
+        "sort_name",
+      );
+    }
+  } catch (error) {
+    browserError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    browserLoading.value = false;
+  }
+}
+async function openPlaylistRow(playlist: Playlist): Promise<void> {
+  openArtistId.value = null;
+  if (openPlaylistId.value === playlist.item_id) {
+    openPlaylistId.value = null;
+    browserDetailTracks.value = [];
+    return;
+  }
+  openPlaylistId.value = playlist.item_id;
+  browserDetailLoading.value = true;
+  try {
+    const items = await api.getPlaylistTracks(
+      playlist.item_id,
+      playlist.provider,
+    );
+    browserDetailTracks.value = items.filter(
+      (item): item is Track => item.media_type === MediaType.TRACK,
+    );
+  } catch (error) {
+    browserError.value = error instanceof Error ? error.message : String(error);
+    browserDetailTracks.value = [];
+  } finally {
+    browserDetailLoading.value = false;
+  }
+}
+async function openArtistRow(artist: Artist): Promise<void> {
+  openPlaylistId.value = null;
+  if (openArtistId.value === artist.item_id) {
+    openArtistId.value = null;
+    browserDetailTracks.value = [];
+    return;
+  }
+  openArtistId.value = artist.item_id;
+  browserDetailLoading.value = true;
+  try {
+    browserDetailTracks.value = await api.getArtistTracks(
+      artist.item_id,
+      artist.provider,
+    );
+  } catch (error) {
+    browserError.value = error instanceof Error ? error.message : String(error);
+    browserDetailTracks.value = [];
+  } finally {
+    browserDetailLoading.value = false;
+  }
+}
+async function analyzePlaylistRow(playlist: Playlist): Promise<void> {
+  const key = `${playlist.provider}/${playlist.item_id}`;
+  analyzingPlaylistIds.value.add(key);
+  try {
+    const result = await api.sendCommand<{
+      total: number;
+      analyzed: string[];
+      skipped: string[];
+      failed: Record<string, string>;
+    }>("smart_dj/analyze_playlist", {
+      playlist_item_id: playlist.item_id,
+      playlist_provider: playlist.provider,
+    });
+    const failedCount = Object.keys(result?.failed ?? {}).length;
+    analyzeResults.value[key] =
+      `${result?.total ?? 0} track(s): ${result?.analyzed.length ?? 0} analyzed, ${result?.skipped.length ?? 0} already had data, ${failedCount} failed`;
+    if (failedCount) {
+      toast.warning(
+        `Analyze finished with ${failedCount} failure(s) for "${playlist.name}".`,
+      );
+    } else {
+      toast.success(`Analyzed "${playlist.name}" — nothing new failed.`);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    analyzeResults.value[key] = `Analyze failed: ${message}`;
+    toast.error(`Could not analyze "${playlist.name}": ${message}`);
+  } finally {
+    analyzingPlaylistIds.value.delete(key);
+  }
+}
+async function sortSavePlaylistRow(playlist: Playlist): Promise<void> {
+  const key = `${playlist.provider}/${playlist.item_id}`;
+  savingSortedId.value = key;
+  try {
+    const result = await api.sendCommand<ApiResponse>(
+      "smart_dj/save_sorted_playlist",
+      {
+        playlist_provider: playlist.provider,
+        playlist_item_id: playlist.item_id,
+        bpm_tolerance: bpmTolerance.value,
+        prefer_keys: keyRelation.value !== "any",
+        preserve_variety: preserveVariety.value,
+        mode: mode.value,
+        controls: buildControls(false),
+      },
+    );
+    sortedSave.value = {
+      title: playlist.name,
+      track_count:
+        typeof result?.track_count === "number" ? result.track_count : 0,
+      order: (Array.isArray(result?.order) ? result.order : []).filter(
+        (name): name is string => typeof name === "string",
+      ),
+      transition_notes: Array.isArray(result?.transition_notes)
+        ? result.transition_notes
+        : [],
+    };
+    toast.success(
+      `Saved "${playlist.name}" in Smart DJ order (${sortedSave.value.track_count} track(s)).`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    toast.error(`Could not sort & save "${playlist.name}": ${message}`);
+  } finally {
+    savingSortedId.value = null;
+  }
+}
+function isTrackSelected(track: Track): boolean {
+  return !!selection.value[trackUri(track)];
+}
+function toggleTrackSelection(track: Track): void {
+  const uri = trackUri(track);
+  if (selection.value[uri]) {
+    delete selection.value[uri];
+  } else {
+    selection.value[uri] = {
+      name: track.name,
+      artist: trackArtistNames(track),
+      uri,
+    };
+  }
+}
+function clearSelection(): void {
+  selection.value = {};
+}
+async function mixSelection(): Promise<void> {
+  const queueId = currentQueueId();
+  if (!queueId || !selectedCount.value) return;
+  mixingSelection.value = true;
+  errorMessage.value = "";
+  try {
+    const uris = selectedUris.value;
+    const result = await api.sendCommand<ApiResponse>("smart_dj/mix_tracks", {
+      queue_id: queueId,
+      uris,
+      mode: mode.value,
+      bpm_tolerance: bpmTolerance.value,
+      prefer_keys: keyRelation.value !== "any",
+      preserve_variety: preserveVariety.value,
+      controls: buildControls(false),
+    });
+    const mixed =
+      typeof result?.count === "number" ? result.count : uris.length;
+    toast.success(`Smart DJ queued ${mixed} track(s) in mix order.`);
+    clearSelection();
+    await refresh();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    errorMessage.value = message;
+    toast.error(`Could not mix the selection: ${message}`);
+  } finally {
+    mixingSelection.value = false;
+  }
+}
+
+// --- hard-requirements insight panel ---------------------------------------
+function hardRuleLabel(rule: string): string {
+  const labels: Record<string, string> = {
+    bpm_delta: "Tempo compatibility",
+    key_incompatible: "Key compatibility",
+    energy_step: "Energy step",
+    energy: "Energy step",
+    danceability: "Danceability step",
+    loudness: "Loudness step",
+    genre: "Genre compatibility",
+    artist_spacing: "Artist spacing",
+    bpm_range: "BPM range",
+    excluded: "Excluded track",
+    instrumental: "Instrumental preference",
+    explicit: "Explicit content",
+  };
+  return labels[rule] ?? rule.replaceAll("_", " ");
+}
+function hardFixLabel(violation: HardViolation): string {
+  const suggestion = violation.suggestion;
+  if (!suggestion) return "Apply fix";
+  if (suggestion.label) return `Apply fix: ${suggestion.label}`;
+  const to = suggestion.to == null ? "" : ` → ${String(suggestion.to)}`;
+  return `Apply fix: ${suggestion.setting ?? "setting"}${to}`;
+}
+function applyHardFix(violation: HardViolation): void {
+  const suggestion = violation.suggestion;
+  if (!suggestion?.setting) return;
+  const setting = suggestion.setting;
+  const to = suggestion.to;
+  const toStr = typeof to === "string" ? to : "";
+  let applied = "";
+  if (setting === "beatStrictness") {
+    if (["strict", "normal", "aggressive"].includes(toStr)) {
+      beatStrictness.value = toStr;
+      applied = `Beat matching → ${toStr}`;
+    }
+  } else if (setting === "bpmTolerance" && typeof to === "number") {
+    bpmTolerance.value = clamp(to, 0.01, 1);
+    applied = `BPM tolerance → ${bpmTolerance.value}`;
+  } else if (setting === "maxBpmJump" && typeof to === "number") {
+    maxBpmJump.value = Math.round(clamp(to, 0, 100));
+    applied = `Maximum BPM jump → ${maxBpmJump.value}`;
+  } else if (setting === "bpmMin" && typeof to === "number") {
+    bpmMin.value = Math.round(clamp(to, 1, 300));
+    applied = `Minimum BPM → ${bpmMin.value}`;
+  } else if (setting === "bpmMax" && typeof to === "number") {
+    bpmMax.value = Math.round(clamp(to, 1, 300));
+    applied = `Maximum BPM → ${bpmMax.value}`;
+  } else if (setting === "keyRelation") {
+    if (["compatible", "same", "soft", "any"].includes(toStr)) {
+      keyRelation.value = toStr;
+      applied = `Key relationship → ${toStr}`;
+    }
+  } else if (setting === "maxArtistRepeat" && typeof to === "number") {
+    maxArtistRepeat.value = Math.round(clamp(to, 1, 20));
+    applied = `Max tracks per artist → ${maxArtistRepeat.value}`;
+  }
+  if (!applied) {
+    toast.info(
+      "That suggested fix targets a control this panel cannot change — adjust it manually, then rebuild the plan.",
+    );
+    return;
+  }
+  toast.success(`Applied: ${applied}. Rebuilding plan…`);
+  void plan();
+}
 async function refresh(): Promise<void> {
   const generation = ++refreshGeneration;
   const queueId = currentQueueId();
@@ -2051,6 +2894,30 @@ async function plan(): Promise<void> {
       preserve_variety: preserveVariety.value,
       controls,
     });
+    // Fail-soft plan-phase hard-requirements report: the server returns the
+    // normal shape plus plan_failed instead of raising, so the strongest
+    // rejected pairing's violations can be rendered (and fixed) in the UI.
+    if (result?.plan_failed === true) {
+      hardViolations.value = (
+        Array.isArray(result.hard_violations) ? result.hard_violations : []
+      ).filter(
+        (item): item is HardViolation =>
+          !!item && typeof item === "object" && typeof item.rule === "string",
+      );
+      planCandidatesRejected.value =
+        typeof result.candidates_rejected === "number"
+          ? result.candidates_rejected
+          : 0;
+      pendingPlan.value = false;
+      plannedControls = null;
+      transitionNotes.value = [];
+      toast.info(
+        "No track order satisfies every hard rule — see the panel above for fixes.",
+      );
+      return;
+    }
+    hardViolations.value = [];
+    planCandidatesRejected.value = 0;
     const previousTracks = [...tracks.value];
     const oldById = new Map(
       previousTracks.map((track) => [track.queue_item_id, track]),
@@ -2139,6 +3006,7 @@ watch(
     automix.value,
     smartReorder.value,
     preserveVariety.value,
+    stemsEnabled.value,
     endTrackId.value,
     ...signalNames.flatMap((name) => [
       signals[name].state,
@@ -2161,6 +3029,16 @@ watch(
   ],
   () => void refresh(),
 );
+watch(browserTab, () => {
+  openPlaylistId.value = null;
+  openArtistId.value = null;
+  browserDetailTracks.value = [];
+  void loadBrowser();
+});
+watch(browserSearch, () => {
+  if (browserSearchTimer) clearTimeout(browserSearchTimer);
+  browserSearchTimer = setTimeout(() => void loadBrowser(), 300);
+});
 onMounted(() => {
   restorePreferences();
   void refresh();
@@ -2175,5 +3053,6 @@ onUnmounted(() => {
   plannedControls = null;
   stopSweepPolling();
   if (gapSearchTimer) clearTimeout(gapSearchTimer);
+  if (browserSearchTimer) clearTimeout(browserSearchTimer);
 });
 </script>
