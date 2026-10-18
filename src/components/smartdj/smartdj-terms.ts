@@ -147,4 +147,14 @@ export const SMART_DJ_TERMS: Record<string, SmartDJTerm> = {
     definition:
       "A repeating block of bars (typically 8 or 16) that structures a track. Transitions that start and end on phrase boundaries sound intentional.",
   },
+  "meta:stems_veto": {
+    label: "Stems vetoed",
+    definition:
+      "The planner decided NOT to separate vocals/instrumentals for this transition — separation was likely to hurt it (for example, a loud outgoing vocal). The overlap runs dry: a plain, safe blend. You can override this with the stems veto override in the AutoMix controls.",
+  },
+  "meta:stems_used": {
+    label: "Stems used",
+    definition:
+      "This transition was built from separated vocals and instrumentals, letting the two voices share the overlap without fighting.",
+  },
 };

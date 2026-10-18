@@ -20,29 +20,42 @@
         </p>
       </div>
 
-      <div class="flex flex-wrap gap-2">
-        <Button variant="outline" :disabled="loading" @click="refresh">
-          <RefreshCw
-            class="mr-2 h-4 w-4"
-            :class="{ 'animate-spin': loading }"
-          />
-          Analyze queue
-        </Button>
-        <Button
-          variant="outline"
-          :disabled="loading || !tracks.length || !smartReorder"
-          @click="plan"
+      <div class="flex flex-col items-stretch gap-1 lg:items-end">
+        <div class="flex flex-wrap gap-2">
+          <Button variant="outline" :disabled="loading" @click="refresh">
+            <RefreshCw
+              class="mr-2 h-4 w-4"
+              :class="{ 'animate-spin': loading }"
+            />
+            Analyze queue
+          </Button>
+          <Button
+            variant="outline"
+            :disabled="loading || !tracks.length || !smartReorder"
+            @click="plan"
+          >
+            <WandSparkles class="mr-2 h-4 w-4" />
+            Build plan
+          </Button>
+          <Button
+            :disabled="loading || !pendingPlan || !smartReorder"
+            @click="applyPlan"
+          >
+            <Check class="mr-2 h-4 w-4" />
+            Apply plan
+          </Button>
+        </div>
+        <!-- Honest progress (0.0.28): while the quick-pull index backfills,
+             plans draw from a partial pool and run slow. Hidden entirely when
+             the server does not report index progress. -->
+        <p
+          v-if="indexProgress"
+          class="text-xs text-amber-600 dark:text-amber-400"
+          role="status"
         >
-          <WandSparkles class="mr-2 h-4 w-4" />
-          Build plan
-        </Button>
-        <Button
-          :disabled="loading || !pendingPlan || !smartReorder"
-          @click="applyPlan"
-        >
-          <Check class="mr-2 h-4 w-4" />
-          Apply plan
-        </Button>
+          Analyzing library, {{ indexProgress.done }}/{{ indexProgress.total }}
+          done — mixes will be slow until then
+        </p>
       </div>
     </header>
 
@@ -313,6 +326,26 @@
               Stem separation is unavailable on this server; transitions fall
               back to plain blends.
             </p>
+            <label
+              v-if="stemsEnabled"
+              class="mt-2 flex items-center justify-between gap-3"
+            >
+              <span class="text-xs text-muted-foreground"
+                >Override stems veto — force stems even when separation is
+                likely to hurt the transition</span
+              >
+              <input
+                v-model="stemsVetoOverride"
+                type="checkbox"
+                class="h-4 w-4"
+                :disabled="!stemsAvailable"
+                :title="
+                  stemsAvailable
+                    ? 'Run stem processing even when the planner vetoes it (loud vocals, low separation confidence)'
+                    : 'Stem separation is not available on this server'
+                "
+              />
+            </label>
             <p
               v-if="!autoMixAvailable"
               class="mt-2 text-xs text-muted-foreground"
@@ -534,6 +567,20 @@
               </Badge>
             </div>
           </div>
+          <!-- 0.0.28 lane A: honest failure rows (last 10). Hidden when the
+               server does not report recent_failures. -->
+          <ul v-if="sweepFailures.length" class="mt-2 space-y-1">
+            <li
+              v-for="(failure, failureIndex) in sweepFailures"
+              :key="`${failure.item_id}-${failureIndex}`"
+              class="rounded-lg border border-destructive/40 p-2 text-xs"
+            >
+              <span class="font-medium">{{
+                failure.name || failure.item_id || "unknown track"
+              }}</span>
+              <span class="text-muted-foreground"> — {{ failure.reason }}</span>
+            </li>
+          </ul>
           <div class="mt-3 flex flex-wrap gap-2">
             <Button
               size="sm"
@@ -1627,6 +1674,22 @@
               fallback="both vocal"
             />
           </div>
+          <!-- 0.0.28 lane D: per-transition stems outcome. The veto reason is
+               server-supplied free text and renders next to the dictionary
+               term; absent fields render nothing. -->
+          <div
+            v-if="note.stems_veto_reason"
+            class="mt-0.5 text-amber-600 dark:text-amber-400"
+          >
+            <ExpandableTerm
+              term-key="meta:stems_veto"
+              fallback="stems vetoed"
+            />
+            <span> — {{ note.stems_veto_reason }}</span>
+          </div>
+          <div v-else-if="note.stems_used === true" class="mt-0.5">
+            <ExpandableTerm term-key="meta:stems_used" fallback="stems used" />
+          </div>
         </li>
       </ul>
     </div>
@@ -1758,6 +1821,16 @@ interface ProviderStatus {
   configured: boolean;
   musicae_host: string;
   cached_tracks: number;
+  // 0.0.28: quick-pull index progress. The server reports these once the
+  // index backfills against the library total; absent (older servers) reads
+  // as "unknown" and the honest-progress line stays hidden.
+  total_indexed?: number;
+  library_tracks?: number;
+}
+interface SweepFailure {
+  item_id: string;
+  name: string;
+  reason: string;
 }
 interface ApiResponse {
   queue_id?: string;
@@ -1801,6 +1874,10 @@ interface TransitionNote {
   style: string | null;
   strictness: string | null;
   source: string | null;
+  // 0.0.28 lane D: per-transition stems outcome. Absent on older servers,
+  // which just means "no veto data" — the row renders without it.
+  stems_used?: boolean | null;
+  stems_veto_reason?: string | null;
 }
 interface LibraryScanState {
   running: boolean;
@@ -1813,6 +1890,9 @@ interface LibraryScanState {
   cancelled: boolean;
   started_at: number | null;
   finished_at: number | null;
+  // 0.0.28 lane A: last-10 failure rows ({item_id, name, reason}); absent on
+  // older servers, which just means "no structured failure rows".
+  recent_failures?: SweepFailure[];
 }
 interface SignalControl {
   state: SignalState;
@@ -1904,6 +1984,13 @@ const hardViolations = ref<HardViolation[]>([]);
 const planCandidatesRejected = ref(0);
 // stems toggle: rides buildControls() as controls.stems_enabled
 const stemsEnabled = ref(false);
+// stems veto override (0.0.28 lane D): when the planner expects separation to
+// hurt (e.g. vocal dominance), it vetoes stem processing for that transition.
+// This user-level override asks the server to run stems anyway. Default OFF —
+// detection wins unless the user explicitly overrides. Writer+reader paired:
+// sent via buildControls() as controls.stems_veto_override and restored from
+// STORAGE_KEY below.
+const stemsVetoOverride = ref(false);
 let refreshGeneration = 0;
 let plannedControls: RawObject | null = null;
 let sweepPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -1984,6 +2071,38 @@ const sweepProgressPct = computed(() => {
 // Absent capability key reads as "assume available" so an older server never
 // hard-disables a toggle that would still degrade gracefully server-side.
 const stemsAvailable = computed(() => capabilities.value?.stems !== false);
+// Honest progress line (0.0.28): while the quick-pull index is still
+// backfilling, mix plans pull from a partial pool and run slow. Both fields
+// are optional on the status response; anything missing, non-numeric, or
+// already-complete hides the line instead of guessing.
+const indexProgress = computed(() => {
+  const s = status.value;
+  if (
+    typeof s?.total_indexed !== "number" ||
+    !Number.isFinite(s.total_indexed) ||
+    typeof s?.library_tracks !== "number" ||
+    !Number.isFinite(s.library_tracks) ||
+    s.library_tracks <= 0
+  )
+    return null;
+  const done = Math.max(
+    0,
+    Math.min(Math.round(s.total_indexed), Math.round(s.library_tracks)),
+  );
+  const total = Math.round(s.library_tracks);
+  if (done >= total) return null;
+  return { done, total };
+});
+// Sweep failure rows (0.0.28 lane A): defensive parse — a missing, non-array,
+// or malformed `recent_failures` just renders nothing.
+const sweepFailures = computed<SweepFailure[]>(() => {
+  const rows = sweep.value?.recent_failures;
+  if (!Array.isArray(rows)) return [];
+  return rows.filter(
+    (row): row is SweepFailure =>
+      !!row && typeof row === "object" && typeof row.reason === "string",
+  );
+});
 const selectedCount = computed(() => Object.keys(selection.value).length);
 const selectedUris = computed(() => Object.keys(selection.value));
 const selectedNames = computed(() => {
@@ -2134,6 +2253,10 @@ function buildControls(apply = false): RawObject {
     // Parsed into DJControls.stems_enabled; degrades to plain blend server-side
     // when the separation runtime is missing.
     stems_enabled: stemsEnabled.value,
+    // Parsed into DJControls.stems_veto_override (0.0.28 lane D); ignored by
+    // older servers. When true, a planned stems veto is overridden and the
+    // transition runs stem processing anyway.
+    stems_veto_override: stemsVetoOverride.value,
     end_track_id: endTrackId.value || null,
     apply,
     required_ids: tracks.value
@@ -2172,6 +2295,7 @@ function savePreferences(): void {
         smartReorder: smartReorder.value,
         preserveVariety: preserveVariety.value,
         stemsEnabled: stemsEnabled.value,
+        stemsVetoOverride: stemsVetoOverride.value,
         endTrackId: endTrackId.value,
         transitionOverrides: transitionOverrides.value,
         trackFlags: Object.fromEntries(
@@ -2269,6 +2393,10 @@ function restorePreferences(): void {
       preserveVariety.value = saved.preserveVariety;
     if (typeof saved.stemsEnabled === "boolean")
       stemsEnabled.value = saved.stemsEnabled;
+    // Reader half of the writer+reader pair (0.0.28 lane D): default OFF when
+    // the key is absent.
+    if (typeof saved.stemsVetoOverride === "boolean")
+      stemsVetoOverride.value = saved.stemsVetoOverride;
     if (typeof saved.endTrackId === "string")
       endTrackId.value = saved.endTrackId;
     if (
@@ -2403,6 +2531,7 @@ function resetPreferences(): void {
   smartReorder.value = true;
   preserveVariety.value = true;
   stemsEnabled.value = false;
+  stemsVetoOverride.value = false;
   endTrackId.value = "";
   transitionOverrides.value = {};
   trackFlags.value = {};
@@ -3007,6 +3136,7 @@ watch(
     smartReorder.value,
     preserveVariety.value,
     stemsEnabled.value,
+    stemsVetoOverride.value,
     endTrackId.value,
     ...signalNames.flatMap((name) => [
       signals[name].state,
