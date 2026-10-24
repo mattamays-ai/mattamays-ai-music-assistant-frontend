@@ -502,7 +502,7 @@
               v-model.number="maxArtistRepeat"
               type="number"
               min="1"
-              max="20"
+              max="10"
               class="w-full rounded-md border bg-background px-3 py-2"
             />
           </label>
@@ -1336,7 +1336,13 @@
             </Button>
           </div>
           <p
-            v-if="gapSearch && !gapSearching && !gapResults.length"
+            v-if="gapSearchFailed && !gapSearching"
+            class="text-sm text-destructive"
+          >
+            Library search failed — check the connection and try again.
+          </p>
+          <p
+            v-else-if="gapSearch && !gapSearching && !gapResults.length"
             class="text-sm text-muted-foreground"
           >
             No library tracks match "{{ gapSearch }}".
@@ -1953,6 +1959,7 @@ const gapSlotOpen = ref(false);
 const gapSearch = ref("");
 const gapSearching = ref(false);
 const gapResults = ref<Track[]>([]);
+const gapSearchFailed = ref(false);
 // library browser: Playlists / Artists / Tracks with in-list search
 const browserTab = ref<BrowserTab>("playlists");
 const browserSearch = ref("");
@@ -2379,7 +2386,7 @@ function restorePreferences(): void {
     )
       beatStrictness.value = saved.beatStrictness;
     if (typeof saved.maxArtistRepeat === "number")
-      maxArtistRepeat.value = Math.round(clamp(saved.maxArtistRepeat, 1, 20));
+      maxArtistRepeat.value = Math.round(clamp(saved.maxArtistRepeat, 1, 10));
     if (typeof saved.transitionAggressiveness === "number")
       transitionAggressiveness.value = clamp(
         saved.transitionAggressiveness,
@@ -2636,14 +2643,19 @@ function searchGapTracks(): void {
   const term = gapSearch.value.trim();
   if (!term) {
     gapResults.value = [];
+    gapSearchFailed.value = false;
     return;
   }
   gapSearchTimer = setTimeout(async () => {
     gapSearching.value = true;
     try {
       gapResults.value = await api.getLibraryTracks(false, term, 25, 0);
+      gapSearchFailed.value = false;
     } catch {
       gapResults.value = [];
+      // a failed search must not render as "no matches" (review finding,
+      // Oct 24): the empty-state string is a lie about the library
+      gapSearchFailed.value = true;
     } finally {
       gapSearching.value = false;
     }
@@ -2851,7 +2863,7 @@ async function mixSelection(): Promise<void> {
     const uris = selectedUris.value;
     const result = await api.sendCommand<ApiResponse>("smart_dj/mix_tracks", {
       queue_id: queueId,
-      uris,
+      track_uris: uris,
       mode: mode.value,
       bpm_tolerance: bpmTolerance.value,
       prefer_keys: keyRelation.value !== "any",
